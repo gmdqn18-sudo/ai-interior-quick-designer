@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useState } from "react";
 
+import type { RenderAfterResponse } from "@/lib/after-image";
 import type { DesignGenerationJob, DesignGenerationResponse, RoomAnalysis, RoomAnalysisResponse } from "@/lib/design-api";
 import { buildDesignShareUrl, buildShoppingListShareText } from "@/lib/design-share";
 import {
@@ -81,6 +82,15 @@ function formatJobTime(value: string) {
   }).format(new Date(value));
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("파일을 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Home() {
   const [budget, setBudget] = useState(300000);
   const [prompt, setPrompt] = useState("30만 원 이하로 따뜻한 우드톤 자취방처럼 꾸며줘. 책상은 그대로 두고 수납을 늘리고 싶어.");
@@ -90,6 +100,10 @@ export default function Home() {
   const [conceptHistory, setConceptHistory] = useState<DesignConcept[]>(() => buildConceptHistory(300000, prompt, 1));
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
+  const [generatedAfterImages, setGeneratedAfterImages] = useState<Record<string, string>>({});
+  const [afterImageNotice, setAfterImageNotice] = useState("방 사진을 올린 뒤 실제 AI After 이미지를 생성할 수 있습니다.");
+  const [isRenderingAfter, setIsRenderingAfter] = useState(false);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -108,6 +122,7 @@ export default function Home() {
   const remainingBudget = budget - selectedConcept.usedBudget;
   const isPromptReady = prompt.trim().length >= 8;
   const isBudgetTight = selectedConcept.usedBudget > budget;
+  const generatedAfterImage = generatedAfterImages[selectedConcept.id];
 
   const refreshRecentJobs = async () => {
     try {
@@ -125,10 +140,17 @@ export default function Home() {
     if (!file) return;
 
     setPreviewUrl(URL.createObjectURL(file));
+    setRoomImageDataUrl(null);
+    setGeneratedAfterImages({});
+    setAfterImageNotice("원본 방 사진을 AI 이미지 생성용으로 준비하는 중입니다...");
     setIsAnalyzing(true);
     setAnalysisNotice("방 사진을 mock Vision API로 분석하는 중입니다...");
 
     try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setRoomImageDataUrl(dataUrl);
+      setAfterImageNotice("방 사진 준비 완료. 선택한 시안으로 실제 AI After 이미지를 생성할 수 있습니다.");
+
       const formData = new FormData();
       formData.append("roomImage", file);
 
@@ -147,6 +169,9 @@ export default function Home() {
     } catch {
       setRoomAnalysis(null);
       setAnalysisNotice("사진 분석 API 호출이 실패했습니다. 시안 생성은 텍스트 조건만으로 계속할 수 있습니다.");
+      setAfterImageNotice((current) =>
+        current.includes("준비 완료") ? current : "이미지 파일을 읽지 못했습니다. 방 사진을 다시 올려주세요.",
+      );
     } finally {
       setIsAnalyzing(false);
     }
@@ -169,6 +194,7 @@ export default function Home() {
     setIsGenerating(true);
     setSelectedConceptId(null);
     setCopyStatus("쇼핑 리스트 복사");
+    setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. 선택한 시안으로 실제 AI After 이미지를 생성할 수 있습니다." : "방 사진을 올린 뒤 실제 AI After 이미지를 생성할 수 있습니다.");
 
     try {
       const response = await fetch("/api/designs", {
@@ -242,6 +268,41 @@ export default function Home() {
     if (!currentJob) return;
     copyTextToClipboard(buildDesignShareUrl(window.location.origin, currentJob.id));
     setShareStatus("링크 복사 완료");
+  };
+
+  const renderAfterImage = async () => {
+    if (!roomImageDataUrl) {
+      setAfterImageNotice("실제 AI After 이미지를 만들려면 먼저 방 사진을 업로드해 주세요.");
+      return;
+    }
+
+    setIsRenderingAfter(true);
+    setAfterImageNotice("OpenAI가 원본 방 사진을 기반으로 실제 After 이미지를 생성하는 중입니다. 보통 20~60초 정도 걸립니다.");
+
+    try {
+      const response = await fetch("/api/render-after", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageDataUrl: roomImageDataUrl,
+          concept: selectedConcept,
+          userPrompt: prompt,
+          keptFurniture,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Partial<RenderAfterResponse> & { error?: string };
+
+      if (!response.ok || !data.imageUrl) {
+        throw new Error(data.error ?? "이미지 생성 API 호출이 실패했습니다.");
+      }
+
+      setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
+      setAfterImageNotice(`실제 AI After 이미지 생성 완료 · ${data.meta?.model ?? "OpenAI"}`);
+    } catch (error) {
+      setAfterImageNotice(error instanceof Error ? `이미지 생성 실패: ${error.message}` : "이미지 생성 실패: 알 수 없는 오류");
+    } finally {
+      setIsRenderingAfter(false);
+    }
   };
 
   return (
@@ -624,24 +685,40 @@ export default function Home() {
                 </div>
                 <div className="rounded-3xl bg-white/10 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
-                    <span>AI After · {selectedConcept.title}</span>
+                    <span>{generatedAfterImage ? "AI After 이미지" : "Mock After Preview"} · {selectedConcept.title}</span>
                     <span>{selectedConcept.products.length}개 상품</span>
                   </div>
-                  <div className={`relative flex h-44 overflow-hidden rounded-2xl ${selectedConcept.palette} p-4 text-slate-950`}>
-                    <div className="absolute left-5 top-5 h-16 w-24 rounded-2xl bg-white/55 shadow-sm" />
-                    <div className="absolute right-5 top-8 h-24 w-16 rounded-2xl bg-white/45 shadow-sm" />
-                    <div className="absolute bottom-4 left-1/2 h-12 w-32 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
-                    <div className="relative z-10 mt-auto w-full rounded-2xl bg-white/85 p-3 text-xs font-black shadow-sm backdrop-blur">
-                      <div className="flex flex-wrap gap-1">
-                        {selectedConcept.highlights.slice(0, 3).map((highlight) => (
-                          <span key={highlight} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] text-white">
-                            {highlight}
-                          </span>
-                        ))}
+                  {generatedAfterImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-44 w-full rounded-2xl object-cover" />
+                  ) : (
+                    <div className={`relative flex h-44 overflow-hidden rounded-2xl ${selectedConcept.palette} p-4 text-slate-950`}>
+                      <div className="absolute left-5 top-5 h-16 w-24 rounded-2xl bg-white/55 shadow-sm" />
+                      <div className="absolute right-5 top-8 h-24 w-16 rounded-2xl bg-white/45 shadow-sm" />
+                      <div className="absolute bottom-4 left-1/2 h-12 w-32 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
+                      <div className="relative z-10 mt-auto w-full rounded-2xl bg-white/85 p-3 text-xs font-black shadow-sm backdrop-blur">
+                        <div className="flex flex-wrap gap-1">
+                          {selectedConcept.highlights.slice(0, 3).map((highlight) => (
+                            <span key={highlight} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] text-white">
+                              {highlight}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-slate-700">대표 구성: {selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
                       </div>
-                      <p className="mt-2 text-slate-700">대표 구성: {selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
                     </div>
+                  )}
+                  <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-300">
+                    {afterImageNotice}
                   </div>
+                  <button
+                    type="button"
+                    onClick={renderAfterImage}
+                    disabled={isRenderingAfter || !roomImageDataUrl}
+                    className="mt-3 w-full rounded-2xl bg-amber-300 px-4 py-3 text-xs font-black text-slate-950 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:hover:translate-y-0"
+                  >
+                    {isRenderingAfter ? "OpenAI 이미지 생성 중..." : generatedAfterImage ? "AI After 이미지 다시 생성" : "실제 AI After 이미지 생성"}
+                  </button>
                 </div>
               </div>
 

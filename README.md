@@ -2,7 +2,7 @@
 
 방 사진, 예산, 취향 프롬프트를 입력하면 같은 예산 안에서 여러 인테리어 시안을 비교하고, 마음에 드는 시안을 쇼핑 리스트/공유 페이지로 전환하는 Next.js MVP입니다.
 
-> 현재 버전은 API 키 없이 동작하는 **mock Vision + mock 상품 조합 MVP**입니다. 실제 Vision/Image/Shopping API 연결 전 UX와 제품 가설을 검증하기 위한 프로토타입입니다.
+> 기본 상품/방 분석은 API 키 없이 mock으로 동작합니다. `.env.local`에 `OPENAI_API_KEY`를 넣으면 `/api/render-after`가 OpenAI 이미지 편집 API를 호출해 업로드한 방 사진 기반의 실제 After 이미지를 생성합니다.
 
 ## 핵심 차별화
 
@@ -101,7 +101,7 @@ src/lib/
 | 영역 | 현재 | 실제 연결 후보 |
 | --- | --- | --- |
 | 방 분석 | mock Vision | Gemini Vision / GPT-4o Vision |
-| After 이미지 | CSS 기반 Preview | OpenAI Images / Gemini Image / FAL / Replicate |
+| After 이미지 | OpenAI `gpt-image-1` 이미지 편집, 키 없으면 CSS mock Preview | OpenAI 품질 튜닝 / FAL / Replicate / 저장소 연동 |
 | 상품 검색 | mock 상품 풀 | 네이버 쇼핑 API / 쿠팡 파트너스 / 제휴 링크 |
 | 저장소 | `.next/cache/roomfit-design-jobs.json` best-effort | DB / KV / Supabase / Vercel KV |
 
@@ -119,7 +119,7 @@ Output Directory: .next
 Node.js: 22.x 권장
 ```
 
-현재 버전은 필수 환경 변수가 없습니다. 실제 API 연결 시 `.env.example`을 기준으로 환경 변수를 추가하세요.
+현재 버전은 로컬에서 API 키 없이 상품/방 분석 mock 흐름을 검증할 수 있습니다. 실제 AI After 이미지 생성까지 테스트하려면 `.env.local` 또는 Vercel 환경 변수에 `OPENAI_API_KEY`를 추가하세요. 실제 API 연결 시 `.env.example`을 기준으로 나머지 환경 변수를 추가하세요.
 
 ## 환경 변수 예시
 
