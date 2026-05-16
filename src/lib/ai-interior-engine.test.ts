@@ -55,6 +55,23 @@ test("buildInteriorDesignPlan prioritizes storage and lighting products while st
   assert.ok(plan.concepts[0].highlights.some((highlight) => highlight.includes("방 분석")));
 });
 
+test("buildInteriorDesignPlan scales recommendations toward a premium budget while staying under budget", () => {
+  const plan = buildInteriorDesignPlan({
+    budget: 1_000_000,
+    prompt: "호텔식 우드톤 수납 조명까지 제대로 꾸미기",
+    generation: 1,
+    keptFurniture: ["책상"],
+    roomAnalysis: baseAnalysis,
+  });
+
+  const highestUsedBudget = Math.max(...plan.concepts.map((concept) => concept.usedBudget));
+
+  assert.ok(highestUsedBudget >= 600_000, `expected at least 600,000원 used, got ${highestUsedBudget}`);
+  assert.ok(plan.concepts.every((concept) => concept.usedBudget <= 1_000_000));
+  assert.ok(plan.concepts.some((concept) => concept.products.length >= 8));
+  assert.ok(plan.concepts.every((concept) => concept.products.length <= 12));
+});
+
 test("buildInteriorDesignPlan exposes metrics for API responses and recent history", () => {
   const plan = buildInteriorDesignPlan({
     budget: 300000,

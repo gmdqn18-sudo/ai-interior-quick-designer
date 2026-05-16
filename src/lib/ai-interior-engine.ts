@@ -147,25 +147,47 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
   const templateMatches = tags.filter((tag) => template.tags.includes(tag)).length;
   const categoryMatch = template.categories.includes(product.category) ? 2 : 0;
   const budgetPenalty = brief.budgetTier === "starter" && product.price > 50000 ? 2 : 0;
-  return tagMatches * 5 + templateMatches * 3 + categoryMatch - budgetPenalty - index * 0.03;
+  const premiumBudgetBoost = brief.budgetTier === "premium" ? Math.min(8, product.price / 30000) : 0;
+  const standardBudgetBoost = brief.budgetTier === "standard" ? Math.min(3, product.price / 60000) : 0;
+  return tagMatches * 5 + templateMatches * 3 + categoryMatch + premiumBudgetBoost + standardBudgetBoost - budgetPenalty - index * 0.03;
 }
 
 function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number) {
   const budgetCap = Math.max(10000, Math.floor(budget * 0.96));
+  const targetSpend = brief.budgetTier === "premium" ? Math.floor(budget * 0.72) : brief.budgetTier === "standard" ? Math.floor(budget * 0.65) : 0;
+  const maxProducts = brief.budgetTier === "premium" ? 12 : brief.budgetTier === "standard" ? 8 : 5;
   const sorted = productPool
     .map((product, index) => ({ product, score: scoreProduct(product, template, brief, index) }))
     .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score || a.product.price - b.product.price);
+    .sort((a, b) => b.score - a.score || (brief.budgetTier === "starter" ? a.product.price - b.product.price : b.product.price - a.product.price));
 
   const picked: Product[] = [];
   let total = 0;
 
   for (const { product } of sorted) {
-    if (picked.some((item) => item.category === product.category) && picked.length >= 3) continue;
+    if (brief.budgetTier === "starter" && picked.some((item) => item.category === product.category) && picked.length >= 3) continue;
     if (total + product.price > budgetCap) continue;
     picked.push(product);
     total += product.price;
-    if (picked.length >= 5) break;
+    if (picked.length >= maxProducts) break;
+  }
+
+  if (targetSpend > 0 && total < targetSpend) {
+    const fillers = productPool
+      .filter((product) => !picked.some((item) => item.id === product.id))
+      .sort((a, b) => {
+        const templateCategoryScore = Number(template.categories.includes(b.category)) - Number(template.categories.includes(a.category));
+        if (templateCategoryScore !== 0) return templateCategoryScore;
+        return b.price - a.price;
+      });
+
+    for (const product of fillers) {
+      if (picked.length >= maxProducts) break;
+      if (total + product.price > budgetCap) continue;
+      picked.push(product);
+      total += product.price;
+      if (picked.length >= maxProducts) break;
+    }
   }
 
   if (picked.length < 3) {
