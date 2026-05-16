@@ -1,5 +1,5 @@
 import type { DesignGenerationJob } from "./design-api";
-import type { Product } from "./interior-design";
+import { getProductPurchaseUrl, type Product } from "./interior-design";
 
 const wonFormatter = new Intl.NumberFormat("ko-KR");
 
@@ -40,7 +40,7 @@ export function getTopValueProducts(job: DesignGenerationJob, limit = 3): Produc
 export function buildShoppingListShareText(job: DesignGenerationJob, shareUrl?: string) {
   const concept = job.concepts[0];
   const productLines = (concept?.products ?? [])
-    .map((product, index) => `${index + 1}. ${product.name} - ${formatWon(product.price)} - ${product.source}`)
+    .map((product, index) => `${index + 1}. ${product.name} - ${formatWon(product.price)} - ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
     .join("\n");
   const lines = [
     `[RoomFit AI] ${concept?.title ?? "인테리어 시안"}`,

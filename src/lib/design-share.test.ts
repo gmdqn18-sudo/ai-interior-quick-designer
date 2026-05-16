@@ -81,6 +81,7 @@ test("buildShoppingListShareText creates copy-ready Korean share text", () => {
   assert.match(text, /\[RoomFit AI\] 방 분석 맞춤 균형 시안/);
   assert.match(text, /공유 링크: https:\/\/example.com\/designs\/job_sharetest/);
   assert.match(text, /1\. 무타공 데스크 페그보드 - 35,900원 - 쿠팡/);
+  assert.match(text, /구매 링크: https:\/\/www\.coupang\.com\/np\/search\?q=/);
 });
 
 test("getTopValueProducts ranks cheaper high-impact products first", () => {

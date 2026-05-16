@@ -21,6 +21,50 @@ export type DesignConcept = {
   products: Product[];
 };
 
+export function getProductPurchaseUrl(product: Product) {
+  const query = encodeURIComponent(product.name);
+
+  switch (product.source) {
+    case "쿠팡":
+      return `https://www.coupang.com/np/search?q=${query}`;
+    case "오늘의집":
+      return `https://ohou.se/productions/feed?query=${query}`;
+    case "이케아":
+      return `https://www.ikea.com/kr/ko/search/?q=${query}`;
+    case "네이버쇼핑":
+      return `https://search.shopping.naver.com/search/all?query=${query}`;
+    default:
+      return product.url;
+  }
+}
+
+export function getProductCompareUrl(product: Product) {
+  return `https://search.shopping.naver.com/search/all?query=${encodeURIComponent(product.name)}`;
+}
+
+export function getProductPlacement(product: Product) {
+  switch (product.category) {
+    case "조명":
+      return "침대 옆/책상 주변의 어두운 영역";
+    case "러그":
+      return "침대 앞 또는 의자 이동 동선";
+    case "커튼":
+      return "창가 전체 톤 정리";
+    case "수납":
+      return "책상 옆·침대 밑·노출 수납 구역";
+    case "침구":
+      return "침대 위 큰 면적";
+    case "가구":
+      return "침대 옆 또는 빈 코너";
+    case "소품":
+      return "빈 벽/코너의 마감 포인트";
+    case "패브릭":
+      return "침대·의자·소파 위 톤 보정";
+    default:
+      return "선택한 시안의 분위기 포인트";
+  }
+}
+
 export const budgetPresets = [100000, 200000, 300000, 500000, 1000000];
 export const keepOptions = ["침대", "책상", "옷장", "소파", "커튼", "조명"];
 export const styleChips = ["우드톤", "화이트 미니멀", "감성 자취방", "수납 중심", "호텔식", "못질 없이"];

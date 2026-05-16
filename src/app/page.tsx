@@ -10,6 +10,9 @@ import {
   buildConcepts,
   budgetPresets,
   DesignConcept,
+  getProductCompareUrl,
+  getProductPlacement,
+  getProductPurchaseUrl,
   getSubstitute,
   keepOptions,
   styleChips,
@@ -23,7 +26,7 @@ function formatWon(amount: number) {
 
 function buildShoppingListText(concept: DesignConcept, budget: number) {
   const productLines = concept.products
-    .map((product) => `- ${product.name} / ${formatWon(product.price)} / ${product.source}`)
+    .map((product, index) => `${index + 1}. ${product.name} / ${formatWon(product.price)} / ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
     .join("\n");
 
   return `[RoomFit AI] ${concept.title}\n설정 예산: ${formatWon(budget)}\n사용 금액: ${formatWon(
@@ -747,6 +750,38 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="mt-4 rounded-3xl border border-amber-300/40 bg-amber-300/10 p-4">
+                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                  <div>
+                    <h3 className="text-sm font-black text-amber-200">이 시안에 실제로 활용한 제품</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-300">
+                      아래 상품명이 이미지/플랜에 반영된 구매 후보입니다. 각 버튼은 해당 쇼핑몰 검색 결과로 바로 연결됩니다.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">총 {selectedConcept.products.length}개 · {formatWon(selectedConcept.usedBudget)}</span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {selectedConcept.products.map((product, index) => (
+                    <a
+                      key={`used-${product.id}`}
+                      href={getProductPurchaseUrl(product)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group rounded-2xl bg-white p-3 text-slate-950 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-black">{product.name}</div>
+                          <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} 바로 열기 · {formatWon(product.price)}</div>
+                          <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">{getProductPlacement(product)}</div>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-5 space-y-4">
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -756,14 +791,20 @@ export default function Home() {
                   <div className="space-y-3">
                     {mustBuyProducts.map((product, index) => {
                       const substitute = getSubstitute(product);
+                      const purchaseUrl = getProductPurchaseUrl(product);
+                      const compareUrl = getProductCompareUrl(product);
+                      const placement = getProductPlacement(product);
 
                       return (
                         <div key={product.id} className="rounded-3xl bg-white p-4 text-slate-950">
                           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                             <div>
-                              <div className="text-xs font-bold text-amber-700">{index + 1}순위 · {product.category} · {product.source}</div>
+                              <div className="text-xs font-bold text-amber-700">{index + 1}순위 · {product.category} · {product.source} 연동</div>
                               <h3 className="mt-1 font-black">{product.name}</h3>
                               <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
+                              <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                                배치 위치: {placement}
+                              </p>
                               <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
                                 역할: {selectedConcept.highlights[index] ?? "선택한 시안의 핵심 분위기 구현"}
                               </p>
@@ -773,10 +814,13 @@ export default function Home() {
                                 </p>
                               ) : null}
                             </div>
-                            <div className="flex shrink-0 items-center gap-3">
+                            <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
                               <span className="font-black">{formatWon(product.price)}</span>
-                              <a href={product.url} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">
-                                구매 후보 보기
+                              <a href={purchaseUrl} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white">
+                                {product.source}에서 열기
+                              </a>
+                              <a href={compareUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-4 py-2 text-center text-xs font-bold text-slate-700">
+                                네이버 가격 비교
                               </a>
                             </div>
                           </div>
@@ -795,24 +839,33 @@ export default function Home() {
                     <div className="space-y-3">
                       {niceToHaveProducts.map((product, index) => {
                         const substitute = getSubstitute(product);
+                        const purchaseUrl = getProductPurchaseUrl(product);
+                        const compareUrl = getProductCompareUrl(product);
+                        const placement = getProductPlacement(product);
 
                         return (
                           <div key={product.id} className="rounded-3xl bg-white/95 p-4 text-slate-950">
                             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                               <div>
-                                <div className="text-xs font-bold text-slate-500">선택 {index + 1} · {product.category} · {product.source}</div>
+                                <div className="text-xs font-bold text-slate-500">선택 {index + 1} · {product.category} · {product.source} 연동</div>
                                 <h3 className="mt-1 font-black">{product.name}</h3>
                                 <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
+                                <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                                  배치 위치: {placement}
+                                </p>
                                 {substitute ? (
                                   <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
                                     저가 대체안: {substitute.name} · {formatWon(substitute.price)}
                                   </p>
                                 ) : null}
                               </div>
-                              <div className="flex shrink-0 items-center gap-3">
+                              <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
                                 <span className="font-black">{formatWon(product.price)}</span>
-                                <a href={product.url} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">
-                                  후보 보기
+                                <a href={purchaseUrl} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white">
+                                  {product.source}에서 열기
+                                </a>
+                                <a href={compareUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-4 py-2 text-center text-xs font-bold text-slate-700">
+                                  네이버 가격 비교
                                 </a>
                               </div>
                             </div>
