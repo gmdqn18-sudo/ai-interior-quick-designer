@@ -34,7 +34,7 @@
 - 없는 공유 링크용 사용자 친화 404 페이지
 - 쇼핑 리스트 복사 텍스트 생성
 - 최근 생성 Job 목록
-- 테스트 기반 AI Interior Engine/공유 helper 검증
+- 실제 OpenAI 이미지 편집 기반 After 이미지 생성: `/api/render-after`
 
 ## 기술 스택
 
@@ -81,6 +81,7 @@ src/app/
   page.tsx                    # 메인 MVP 데모
   api/room-analysis/route.ts  # mock Vision 분석 API
   api/designs/route.ts        # 시안 생성/목록 API
+  api/render-after/route.ts   # OpenAI 이미지 편집 기반 실제 After 이미지 생성
   api/designs/[jobId]/route.ts# Job 상세 JSON API
   designs/[jobId]/page.tsx    # 사용자용 공유 상세 페이지
   designs/[jobId]/not-found.tsx
@@ -101,7 +102,7 @@ src/lib/
 | 영역 | 현재 | 실제 연결 후보 |
 | --- | --- | --- |
 | 방 분석 | mock Vision | Gemini Vision / GPT-4o Vision |
-| After 이미지 | OpenAI `gpt-image-1` 이미지 편집, 키 없으면 CSS mock Preview | OpenAI 품질 튜닝 / FAL / Replicate / 저장소 연동 |
+| After 이미지 | OpenAI `gpt-image-2` 이미지 편집, 키 없으면 CSS mock Preview | 카메라/구도 고정 품질 튜닝 / FAL / Replicate / 저장소 연동 |
 | 상품 검색 | mock 상품 풀 | 네이버 쇼핑 API / 쿠팡 파트너스 / 제휴 링크 |
 | 저장소 | `.next/cache/roomfit-design-jobs.json` best-effort | DB / KV / Supabase / Vercel KV |
 
@@ -127,6 +128,8 @@ Node.js: 22.x 권장
 # 실제 Vision API 연결 시 사용 예정
 GEMINI_API_KEY=
 OPENAI_API_KEY=
+OPENAI_IMAGE_MODEL=gpt-image-2
+OPENAI_IMAGE_SIZE=1536x1024
 
 # 실제 상품 API 연결 시 사용 예정
 NAVER_SHOPPING_CLIENT_ID=
