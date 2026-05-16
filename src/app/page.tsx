@@ -102,7 +102,7 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
   const [generatedAfterImages, setGeneratedAfterImages] = useState<Record<string, string>>({});
-  const [afterImageNotice, setAfterImageNotice] = useState("방 사진을 올리면 촬영한 각도/구도를 최대한 고정한 실제 AI After 이미지를 생성할 수 있습니다.");
+  const [afterImageNotice, setAfterImageNotice] = useState("AI 이미지는 스타일 참고용입니다. 실제 실행 기준은 아래 예산 맞춤 구매 플랜입니다.");
   const [isRenderingAfter, setIsRenderingAfter] = useState(false);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -123,6 +123,10 @@ export default function Home() {
   const isPromptReady = prompt.trim().length >= 8;
   const isBudgetTight = selectedConcept.usedBudget > budget;
   const generatedAfterImage = generatedAfterImages[selectedConcept.id];
+  const mustBuyProducts = selectedConcept.products.slice(0, Math.min(3, selectedConcept.products.length));
+  const niceToHaveProducts = selectedConcept.products.slice(mustBuyProducts.length);
+  const planCompletionPercent = Math.min(100, Math.round((selectedConcept.usedBudget / Math.max(budget, 1)) * 100));
+  const keptFurnitureText = keptFurniture.length > 0 ? keptFurniture.join(" · ") : "큰 가구는 최대한 유지";
 
   const refreshRecentJobs = async () => {
     try {
@@ -149,7 +153,7 @@ export default function Home() {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setRoomImageDataUrl(dataUrl);
-      setAfterImageNotice("방 사진 준비 완료. 선택한 시안으로 촬영 각도 고정형 AI After 이미지를 생성할 수 있습니다.");
+      setAfterImageNotice("방 사진 준비 완료. AI 이미지는 참고용으로 만들고, 실제 실행은 아래 구매 플랜 기준으로 제안합니다.");
 
       const formData = new FormData();
       formData.append("roomImage", file);
@@ -194,7 +198,7 @@ export default function Home() {
     setIsGenerating(true);
     setSelectedConceptId(null);
     setCopyStatus("쇼핑 리스트 복사");
-    setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. 선택한 시안으로 촬영 각도 고정형 AI After 이미지를 생성할 수 있습니다." : "방 사진을 올리면 촬영한 각도/구도를 최대한 고정한 실제 AI After 이미지를 생성할 수 있습니다.");
+    setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. AI 이미지는 참고용으로 생성하고, 실제 구매 판단은 아래 예산 플랜을 기준으로 보세요." : "AI 이미지는 스타일 참고용입니다. 실제 실행 기준은 아래 예산 맞춤 구매 플랜입니다.");
 
     try {
       const response = await fetch("/api/designs", {
@@ -297,7 +301,7 @@ export default function Home() {
       }
 
       setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
-      setAfterImageNotice(`촬영 각도 고정형 AI After 이미지 생성 완료 · ${data.meta?.model ?? "OpenAI"}`);
+      setAfterImageNotice(`스타일 참고 이미지 생성 완료 · ${data.meta?.model ?? "OpenAI"} · 실제 구매 기준은 아래 플랜입니다.`);
     } catch (error) {
       setAfterImageNotice(error instanceof Error ? `이미지 생성 실패: ${error.message}` : "이미지 생성 실패: 알 수 없는 오류");
     } finally {
@@ -655,8 +659,10 @@ export default function Home() {
               <p className="text-sm font-bold text-amber-300">STEP 3</p>
               <div className="mt-1 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                 <div>
-                  <h2 className="text-2xl font-black">선택한 시안의 쇼핑 리스트</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-300">마음에 든 시안을 선택한 뒤에만 상품 리스트를 보여줍니다. 상품 선택은 생성 전에 요구하지 않습니다.</p>
+                  <h2 className="text-2xl font-black">예산 안에서 이 방 완성하기</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    AI 이미지는 스타일 참고용으로 쓰고, 실제 판단 기준은 아래 예산·우선순위·구매 리스트입니다.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -667,15 +673,34 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="mt-5 grid grid-cols-3 gap-2 text-center text-sm font-bold">
+              <div className="mt-5 grid gap-2 text-center text-sm font-bold sm:grid-cols-4">
                 <div className="rounded-2xl bg-white/10 p-3">설정 예산<br />{formatWon(budget)}</div>
                 <div className="rounded-2xl bg-white/10 p-3">사용 금액<br />{formatWon(selectedConcept.usedBudget)}</div>
                 <div className="rounded-2xl bg-white/10 p-3">남은 예산<br />{formatWon(remainingBudget)}</div>
+                <div className="rounded-2xl bg-amber-300 p-3 text-slate-950">예산 활용<br />{planCompletionPercent}%</div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-3xl bg-white/10 p-4">
+                  <div className="text-xs font-black text-amber-200">유지할 것</div>
+                  <p className="mt-2 text-sm font-bold leading-6 text-white">{keptFurnitureText}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">월세방/자취방 기준으로 큰 가구와 구조 변경은 최소화합니다.</p>
+                </div>
+                <div className="rounded-3xl bg-white/10 p-4">
+                  <div className="text-xs font-black text-amber-200">바꿀 것</div>
+                  <p className="mt-2 text-sm font-bold leading-6 text-white">{selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">구매 리스트에 있는 품목만 중심으로 분위기를 바꿉니다.</p>
+                </div>
+                <div className="rounded-3xl bg-white/10 p-4">
+                  <div className="text-xs font-black text-amber-200">실행 기준</div>
+                  <p className="mt-2 text-sm font-bold leading-6 text-white">먼저 살 핵심 {mustBuyProducts.length}개 + 선택 {niceToHaveProducts.length}개</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">예쁜 이미지보다 실패 없는 구매 순서를 우선합니다.</p>
+                </div>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <div className="rounded-3xl bg-white/10 p-3">
-                  <div className="mb-2 text-xs font-black text-slate-300">Before</div>
+                  <div className="mb-2 text-xs font-black text-slate-300">현재 방</div>
                   {previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={previewUrl} alt="원본 방 사진" className="h-40 w-full rounded-2xl bg-slate-900 object-contain" />
@@ -685,7 +710,7 @@ export default function Home() {
                 </div>
                 <div className="rounded-3xl bg-white/10 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
-                    <span>{generatedAfterImage ? "AI After 이미지" : "Mock After Preview"} · {selectedConcept.title}</span>
+                    <span>{generatedAfterImage ? "스타일 참고 이미지" : "Mock 스타일 참고"} · {selectedConcept.title}</span>
                     <span>{selectedConcept.products.length}개 상품</span>
                   </div>
                   {generatedAfterImage ? (
@@ -717,38 +742,86 @@ export default function Home() {
                     disabled={isRenderingAfter || !roomImageDataUrl}
                     className="mt-3 w-full rounded-2xl bg-amber-300 px-4 py-3 text-xs font-black text-slate-950 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:hover:translate-y-0"
                   >
-                    {isRenderingAfter ? "OpenAI 이미지 생성 중..." : generatedAfterImage ? "AI After 이미지 다시 생성" : "실제 AI After 이미지 생성"}
+                    {isRenderingAfter ? "OpenAI 이미지 생성 중..." : generatedAfterImage ? "스타일 참고 이미지 다시 생성" : "스타일 참고 이미지 생성"}
                   </button>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-3">
-                {selectedConcept.products.map((product) => {
-                  const substitute = getSubstitute(product);
+              <div className="mt-5 space-y-4">
+                <div>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-black text-amber-200">먼저 살 핵심 아이템</h3>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">분위기 변화 우선</span>
+                  </div>
+                  <div className="space-y-3">
+                    {mustBuyProducts.map((product, index) => {
+                      const substitute = getSubstitute(product);
 
-                  return (
-                    <div key={product.id} className="rounded-3xl bg-white p-4 text-slate-950">
-                      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                        <div>
-                          <div className="text-xs font-bold text-amber-700">{product.category} · {product.source}</div>
-                          <h3 className="mt-1 font-black">{product.name}</h3>
-                          <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
-                          {substitute ? (
-                            <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-                              저가 대체안: {substitute.name} · {formatWon(substitute.price)}
-                            </p>
-                          ) : null}
+                      return (
+                        <div key={product.id} className="rounded-3xl bg-white p-4 text-slate-950">
+                          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                            <div>
+                              <div className="text-xs font-bold text-amber-700">{index + 1}순위 · {product.category} · {product.source}</div>
+                              <h3 className="mt-1 font-black">{product.name}</h3>
+                              <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
+                              <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                                역할: {selectedConcept.highlights[index] ?? "선택한 시안의 핵심 분위기 구현"}
+                              </p>
+                              {substitute ? (
+                                <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                                  저가 대체안: {substitute.name} · {formatWon(substitute.price)}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-3">
+                              <span className="font-black">{formatWon(product.price)}</span>
+                              <a href={product.url} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">
+                                구매 후보 보기
+                              </a>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className="font-black">{formatWon(product.price)}</span>
-                          <a href={product.url} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">
-                            보기
-                          </a>
-                        </div>
-                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {niceToHaveProducts.length > 0 ? (
+                  <div>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-black text-amber-200">있으면 좋은 추가 아이템</h3>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">예산 여유분 활용</span>
                     </div>
-                  );
-                })}
+                    <div className="space-y-3">
+                      {niceToHaveProducts.map((product, index) => {
+                        const substitute = getSubstitute(product);
+
+                        return (
+                          <div key={product.id} className="rounded-3xl bg-white/95 p-4 text-slate-950">
+                            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                              <div>
+                                <div className="text-xs font-bold text-slate-500">선택 {index + 1} · {product.category} · {product.source}</div>
+                                <h3 className="mt-1 font-black">{product.name}</h3>
+                                <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
+                                {substitute ? (
+                                  <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                                    저가 대체안: {substitute.name} · {formatWon(substitute.price)}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-3">
+                                <span className="font-black">{formatWon(product.price)}</span>
+                                <a href={product.url} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">
+                                  후보 보기
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

@@ -142,6 +142,7 @@ COUPANG_PARTNERS_SECRET_KEY=
 
 ## 문서
 
+- `docs/PRODUCT_DIRECTION_REVIEW.md`
 - `docs/AI_Interior_Quick_Designer_기획서.md`
 - `docs/MVP_개발_실행계획서.md`
 
