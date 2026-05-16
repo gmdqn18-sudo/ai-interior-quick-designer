@@ -79,17 +79,21 @@ export function buildAfterImagePrompt(input: {
   const highlights = input.concept.highlights.join(", ");
 
   return [
-    "Create a photorealistic interior redesign image based on the provided room photo.",
-    "Preserve the original room layout, camera angle, walls, doors, windows, and major fixed architecture.",
+    "Use the provided room photo as the locked reference frame for an image-to-image interior edit.",
+    "CRITICAL: keep the exact same camera position, camera height, lens perspective, field of view, crop, and viewing angle as the input photo.",
+    "Do not rotate, zoom in, zoom out, reframe, change to eye-level, change to a catalog/product-shot angle, or create a different room.",
+    "Preserve the original room geometry and fixed architecture: walls, floor, ceiling lines, door, window, radiator, curtain rail, built-in structures, and visible room boundaries.",
+    "Preserve the real placement scale of major furniture unless explicitly replaced: bed area, desk/chair zone, wardrobe/storage zone, and circulation paths must stay recognizable from the original photo.",
+    "Edit the existing room in-place: declutter, recolor, restyle, add realistic renter-friendly decor and purchasable items, but keep the Before/After comparable from the same shot.",
     "This is a Korean small room / bedroom / studio apartment context, renter-friendly and realistic.",
     `Design concept title: ${input.concept.title}`,
     `Design strategy: ${input.concept.strategy}`,
     `User requested mood and constraints: ${input.userPrompt || "budget-friendly warm minimal room"}`,
-    `Furniture to keep and visually retain: ${keptFurnitureText}`,
+    `Furniture to keep and visually retain in the same approximate location: ${keptFurnitureText}`,
     `Key highlights: ${highlights}`,
     `Recommended items to reflect visually: ${productNames.join("; ")}`,
-    "Make the room look cleaner, staged, and purchase-realistic, not a luxury mansion.",
-    "Remove visual clutter where reasonable, but do not change the room into a different space.",
+    "Make the room cleaner, staged, and purchase-realistic, not a luxury mansion or showroom.",
+    "The final image must feel like the same photo after interior changes, not a newly photographed reference room.",
     "No text, no labels, no watermark, no people, no extra UI elements.",
   ].join("\n");
 }

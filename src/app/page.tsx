@@ -102,7 +102,7 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
   const [generatedAfterImages, setGeneratedAfterImages] = useState<Record<string, string>>({});
-  const [afterImageNotice, setAfterImageNotice] = useState("방 사진을 올린 뒤 실제 AI After 이미지를 생성할 수 있습니다.");
+  const [afterImageNotice, setAfterImageNotice] = useState("방 사진을 올리면 촬영한 각도/구도를 최대한 고정한 실제 AI After 이미지를 생성할 수 있습니다.");
   const [isRenderingAfter, setIsRenderingAfter] = useState(false);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -149,7 +149,7 @@ export default function Home() {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setRoomImageDataUrl(dataUrl);
-      setAfterImageNotice("방 사진 준비 완료. 선택한 시안으로 실제 AI After 이미지를 생성할 수 있습니다.");
+      setAfterImageNotice("방 사진 준비 완료. 선택한 시안으로 촬영 각도 고정형 AI After 이미지를 생성할 수 있습니다.");
 
       const formData = new FormData();
       formData.append("roomImage", file);
@@ -194,7 +194,7 @@ export default function Home() {
     setIsGenerating(true);
     setSelectedConceptId(null);
     setCopyStatus("쇼핑 리스트 복사");
-    setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. 선택한 시안으로 실제 AI After 이미지를 생성할 수 있습니다." : "방 사진을 올린 뒤 실제 AI After 이미지를 생성할 수 있습니다.");
+    setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. 선택한 시안으로 촬영 각도 고정형 AI After 이미지를 생성할 수 있습니다." : "방 사진을 올리면 촬영한 각도/구도를 최대한 고정한 실제 AI After 이미지를 생성할 수 있습니다.");
 
     try {
       const response = await fetch("/api/designs", {
@@ -277,7 +277,7 @@ export default function Home() {
     }
 
     setIsRenderingAfter(true);
-    setAfterImageNotice("OpenAI가 원본 방 사진을 기반으로 실제 After 이미지를 생성하는 중입니다. 보통 20~60초 정도 걸립니다.");
+    setAfterImageNotice("OpenAI가 원본 방 사진의 촬영 각도/구도/방 구조를 고정한 채 After 이미지를 생성하는 중입니다. 보통 20~60초 정도 걸립니다.");
 
     try {
       const response = await fetch("/api/render-after", {
@@ -297,7 +297,7 @@ export default function Home() {
       }
 
       setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
-      setAfterImageNotice(`실제 AI After 이미지 생성 완료 · ${data.meta?.model ?? "OpenAI"}`);
+      setAfterImageNotice(`촬영 각도 고정형 AI After 이미지 생성 완료 · ${data.meta?.model ?? "OpenAI"}`);
     } catch (error) {
       setAfterImageNotice(error instanceof Error ? `이미지 생성 실패: ${error.message}` : "이미지 생성 실패: 알 수 없는 오류");
     } finally {
@@ -372,7 +372,7 @@ export default function Home() {
             <label className="group flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-amber-200 bg-amber-50/60 p-4 text-center transition hover:bg-amber-50">
               {previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewUrl} alt="업로드한 방 사진 미리보기" className="h-48 w-full rounded-2xl object-cover" />
+                <img src={previewUrl} alt="업로드한 방 사진 미리보기" className="h-48 w-full rounded-2xl bg-slate-900 object-contain" />
               ) : (
                 <div>
                   <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm">＋</div>
@@ -678,7 +678,7 @@ export default function Home() {
                   <div className="mb-2 text-xs font-black text-slate-300">Before</div>
                   {previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewUrl} alt="원본 방 사진" className="h-40 w-full rounded-2xl object-cover" />
+                    <img src={previewUrl} alt="원본 방 사진" className="h-40 w-full rounded-2xl bg-slate-900 object-contain" />
                   ) : (
                     <div className="flex h-40 items-center justify-center rounded-2xl bg-slate-800 text-sm text-slate-400">업로드한 방 사진 영역</div>
                   )}
@@ -690,7 +690,7 @@ export default function Home() {
                   </div>
                   {generatedAfterImage ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-44 w-full rounded-2xl object-cover" />
+                    <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-44 w-full rounded-2xl bg-slate-900 object-contain" />
                   ) : (
                     <div className={`relative flex h-44 overflow-hidden rounded-2xl ${selectedConcept.palette} p-4 text-slate-950`}>
                       <div className="absolute left-5 top-5 h-16 w-24 rounded-2xl bg-white/55 shadow-sm" />

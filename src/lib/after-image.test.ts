@@ -43,7 +43,9 @@ test("buildAfterImagePrompt preserves room structure and includes selected conce
     keptFurniture: ["책상", "침대"],
   });
 
-  assert.match(prompt, /preserve the original room layout/i);
+  assert.match(prompt, /exact same camera position/i);
+  assert.match(prompt, /Do not rotate, zoom in, zoom out, reframe/i);
+  assert.match(prompt, /same photo after interior changes/i);
   assert.match(prompt, /Korean small room/i);
   assert.match(prompt, /화이트 미니멀 수납 시안/);
   assert.match(prompt, /책상, 침대/);

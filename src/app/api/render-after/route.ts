@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const OPENAI_IMAGE_MODEL = "gpt-image-1";
-const OPENAI_IMAGE_SIZE = "1024x1024";
+const OPENAI_IMAGE_SIZE = "1536x1024";
 
 async function callOpenAIImageEdit(input: RenderAfterInput) {
   const prompt = buildAfterImagePrompt({
