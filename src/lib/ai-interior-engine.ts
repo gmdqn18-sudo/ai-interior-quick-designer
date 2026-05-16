@@ -10,7 +10,9 @@ export type InteriorPriorityTag =
   | "hotel"
   | "workstation"
   | "plant"
-  | "fabric";
+  | "fabric"
+  | "living-room"
+  | "cozy-natural";
 
 export type InteriorPromptBrief = {
   normalizedPrompt: string;
@@ -111,8 +113,10 @@ export function buildPromptBrief(input: DesignGenerationRequest): InteriorPrompt
   if (hasAny(promptIndex, ["미니멀", "화이트", "깔끔"])) tags.push("minimal");
   if (hasAny(promptIndex, ["호텔", "침구", "호텔식"])) tags.push("hotel");
   if (input.keptFurniture.includes("책상") || hasAny(promptIndex, ["작업", "책상", "데스크"])) tags.push("workstation");
-  if (hasAny(promptIndex, ["식물", "화분", "플랜트"])) tags.push("plant");
-  if (hasAny(promptIndex, ["패브릭", "러그", "커튼", "침구"])) tags.push("fabric");
+  if (hasAny(promptIndex, ["식물", "화분", "플랜트", "초록", "숲"])) tags.push("plant");
+  if (hasAny(promptIndex, ["패브릭", "러그", "커튼", "침구", "쿠션", "소파"])) tags.push("fabric");
+  if (hasAny(promptIndex, ["거실", "소파", "티테이블", "커피테이블", "라운지"])) tags.push("living-room");
+  if (hasAny(promptIndex, ["지브리", "포근", "아늑", "동화", "내추럴", "라탄", "원목", "숲", "컨셉"])) tags.push("cozy-natural");
 
   return {
     normalizedPrompt: promptIndex || "예산 안에서 빠르게 체감되는 인테리어 시안",
@@ -128,15 +132,17 @@ function productTags(product: Product): InteriorPriorityTag[] {
   const text = `${product.name} ${product.category} ${product.reason}`;
   const tags: InteriorPriorityTag[] = [];
 
-  if (product.category === "수납" || hasAny(text, ["수납", "정리", "박스", "카트"])) tags.push("storage");
-  if (product.category === "조명" || hasAny(text, ["조명", "램프", "무드", "웜톤"])) tags.push("lighting");
+  if (product.category === "수납" || hasAny(text, ["수납", "정리", "박스", "카트", "북쉘프"])) tags.push("storage");
+  if (product.category === "조명" || hasAny(text, ["조명", "램프", "무드", "웜톤", "한지"])) tags.push("lighting");
   if (hasAny(text, ["무타공", "못질 없이", "이동식", "집게형"])) tags.push("renter-safe");
-  if (hasAny(text, ["우드", "오크", "베이지", "웜", "아이보리"])) tags.push("warm-tone");
+  if (hasAny(text, ["우드", "오크", "베이지", "웜", "아이보리", "원목", "라탄", "내추럴"])) tags.push("warm-tone");
   if (hasAny(text, ["화이트", "미니멀", "슬림", "깔끔"])) tags.push("minimal");
   if (hasAny(text, ["호텔", "침구"])) tags.push("hotel");
   if (hasAny(text, ["책상", "데스크", "모니터"])) tags.push("workstation");
-  if (hasAny(text, ["화분", "식물", "조화"])) tags.push("plant");
-  if (["러그", "커튼", "침구", "패브릭"].includes(product.category)) tags.push("fabric");
+  if (hasAny(text, ["화분", "식물", "조화", "숲", "자연"])) tags.push("plant");
+  if (["러그", "커튼", "침구", "패브릭"].includes(product.category) || hasAny(text, ["쿠션", "린넨", "코튼"])) tags.push("fabric");
+  if (product.category === "거실가구" || hasAny(text, ["거실", "티테이블", "커피테이블", "소파", "좌식", "라운드"])) tags.push("living-room");
+  if (hasAny(text, ["지브리", "포근", "아늑", "동화", "내추럴", "라탄", "원목", "숲", "한지", "코튼"])) tags.push("cozy-natural");
 
   return uniqueTags(tags);
 }
@@ -149,7 +155,11 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
   const budgetPenalty = brief.budgetTier === "starter" && product.price > 50000 ? 2 : 0;
   const premiumBudgetBoost = brief.budgetTier === "premium" ? Math.min(8, product.price / 30000) : 0;
   const standardBudgetBoost = brief.budgetTier === "standard" ? Math.min(3, product.price / 60000) : 0;
-  return tagMatches * 5 + templateMatches * 3 + categoryMatch + premiumBudgetBoost + standardBudgetBoost - budgetPenalty - index * 0.03;
+  const promptMismatchPenalty =
+    (tags.includes("living-room") && !brief.priorityTags.includes("living-room") ? 4 : 0) +
+    (tags.includes("cozy-natural") && !brief.priorityTags.includes("cozy-natural") ? 4 : 0) +
+    (tags.includes("workstation") && !brief.priorityTags.includes("workstation") ? 2 : 0);
+  return tagMatches * 5 + templateMatches * 3 + categoryMatch + premiumBudgetBoost + standardBudgetBoost - budgetPenalty - promptMismatchPenalty - index * 0.03;
 }
 
 function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number) {

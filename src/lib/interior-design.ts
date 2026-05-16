@@ -56,6 +56,8 @@ export function getProductPlacement(product: Product) {
       return "침대 위 큰 면적";
     case "가구":
       return "침대 옆 또는 빈 코너";
+    case "거실가구":
+      return "소파 앞·창가·거실 중앙의 포근한 휴식 영역";
     case "소품":
       return "빈 벽/코너의 마감 포인트";
     case "패브릭":
@@ -357,6 +359,60 @@ export const productPool: Product[] = [
     source: "쿠팡",
     url: "https://www.coupang.com/",
     reason: "주조명을 바꿔 낮은 채광과 야간 분위기를 모두 개선해요.",
+  },
+  {
+    id: "round-oak-coffee-table",
+    name: "원목 라운드 거실 티테이블",
+    category: "거실가구",
+    price: 119000,
+    source: "오늘의집",
+    url: "https://ohou.se/",
+    reason: "거실 중앙에 포근한 동화풍 휴식 포인트를 만들어요.",
+  },
+  {
+    id: "rattan-floor-cushion",
+    name: "라탄 무드 플로어 쿠션 세트",
+    category: "패브릭",
+    price: 69000,
+    source: "네이버쇼핑",
+    url: "https://shopping.naver.com/",
+    reason: "소파 없이도 지브리풍의 낮고 아늑한 좌식 공간을 만들어요.",
+  },
+  {
+    id: "forest-illustration-poster",
+    name: "숲 일러스트 포스터 액자 세트",
+    category: "소품",
+    price: 45900,
+    source: "오늘의집",
+    url: "https://ohou.se/",
+    reason: "벽면에 동화 같은 자연 무드를 더해 컨셉을 분명하게 보여줘요.",
+  },
+  {
+    id: "linen-cotton-curtain",
+    name: "내추럴 린넨 코튼 커튼",
+    category: "커튼",
+    price: 79900,
+    source: "오늘의집",
+    url: "https://ohou.se/",
+    reason: "강한 빛을 부드럽게 낮춰 포근하고 따뜻한 거실 분위기를 만들어요.",
+  },
+  {
+    id: "wood-open-bookshelf",
+    name: "원목 오픈 북쉘프 수납장",
+    category: "수납",
+    price: 139000,
+    source: "이케아",
+    url: "https://www.ikea.com/kr/ko/",
+    reason: "책과 소품을 함께 보여줘 자연스럽고 포근한 거실 수납을 완성해요.",
+  },
+  {
+    id: "paper-shade-floor-lamp",
+    name: "한지 무드 플로어 조명",
+    category: "조명",
+    price: 65900,
+    source: "쿠팡",
+    url: "https://www.coupang.com/",
+    reason: "거실 구석의 빛을 부드럽게 퍼뜨려 아늑한 동화풍 분위기를 만들어요.",
   },
   {
     id: "oak-full-length-mirror",

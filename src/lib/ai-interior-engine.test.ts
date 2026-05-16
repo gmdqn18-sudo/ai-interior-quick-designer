@@ -72,6 +72,32 @@ test("buildInteriorDesignPlan scales recommendations toward a premium budget whi
   assert.ok(plan.concepts.every((concept) => concept.products.length <= 12));
 });
 
+test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room prompt", () => {
+  const ghibliPlan = buildInteriorDesignPlan({
+    budget: 1_000_000,
+    prompt: "여기는 거실인데, 지브리 컨셉의 포근한 느낌으로 꾸미고 싶어요.",
+    generation: 1,
+    keptFurniture: [],
+    roomAnalysis: baseAnalysis,
+  });
+  const minimalPlan = buildInteriorDesignPlan({
+    budget: 1_000_000,
+    prompt: "화이트 미니멀하게 수납 중심으로 정리하고 싶어요.",
+    generation: 1,
+    keptFurniture: [],
+    roomAnalysis: baseAnalysis,
+  });
+
+  const ghibliProducts = ghibliPlan.concepts[0].products.map((product) => product.name);
+  const minimalProducts = minimalPlan.concepts[0].products.map((product) => product.name);
+  const ghibliTopSix = ghibliProducts.slice(0, 6).join(" ");
+  const overlap = ghibliProducts.filter((name) => minimalProducts.includes(name)).length;
+
+  assert.match(ghibliTopSix, /원목|라탄|플로어 쿠션|숲|포스터|북쉘프|코튼/);
+  assert.ok(!ghibliTopSix.includes("데스크"), `Ghibli living-room top products should not be desk-heavy: ${ghibliTopSix}`);
+  assert.ok(overlap <= 7, `expected prompt-specific product mix, got ${overlap} overlapping products`);
+});
+
 test("buildInteriorDesignPlan exposes metrics for API responses and recent history", () => {
   const plan = buildInteriorDesignPlan({
     budget: 300000,
