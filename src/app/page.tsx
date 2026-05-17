@@ -142,6 +142,15 @@ export default function Home() {
     }
   };
 
+  const applyDesignResponse = (data: DesignGenerationResponse, nextGeneration: number) => {
+    setConcepts(data.concepts);
+    setConceptHistory(data.history);
+    setCurrentJob(data.job);
+    setShareStatus("공유 링크 복사");
+    setGeneration(nextGeneration);
+    setSelectedConceptId(data.concepts[0]?.id ?? null);
+  };
+
   const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -173,6 +182,32 @@ export default function Home() {
       const data = (await response.json()) as RoomAnalysisResponse;
       setRoomAnalysis(data.analysis);
       setAnalysisNotice(`분석 완료: ${data.analysis.summary}`);
+
+      try {
+        const nextGeneration = generation + 1;
+        setIsGenerating(true);
+        setApiNotice("방 사진 분석 결과를 반영해 Step 2 시안 3가지를 다시 계산하는 중입니다...");
+        setApiNoticeTone("neutral");
+
+        const designResponse = await fetch("/api/designs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ budget, prompt, generation: nextGeneration, keptFurniture, roomAnalysis: data.analysis }),
+        });
+
+        if (!designResponse.ok) {
+          throw new Error("Design API failed after room analysis");
+        }
+
+        const designData = (await designResponse.json()) as DesignGenerationResponse;
+        applyDesignResponse(designData, nextGeneration);
+        setApiNotice(`사진 분석 반영 완료 · ${data.analysis.roomType} · 채광 ${data.analysis.lightLevel} · 생활감 ${data.analysis.clutterLevel} 기준으로 Step 2 시안이 갱신되었습니다.`);
+        setApiNoticeTone("success");
+        void refreshRecentJobs();
+      } catch {
+        setApiNotice("사진 분석은 완료됐지만 시안 자동 갱신에 실패했습니다. 아래 버튼을 눌러 다시 계산해 주세요.");
+        setApiNoticeTone("warning");
+      }
     } catch {
       setRoomAnalysis(null);
       setAnalysisNotice("사진 분석 API 호출이 실패했습니다. 시안 생성은 텍스트 조건만으로 계속할 수 있습니다.");
@@ -215,11 +250,7 @@ export default function Home() {
       }
 
       const data = (await response.json()) as DesignGenerationResponse;
-      setConcepts(data.concepts);
-      setConceptHistory(data.history);
-      setCurrentJob(data.job);
-      setShareStatus("공유 링크 복사");
-      setGeneration(nextGeneration);
+      applyDesignResponse(data, nextGeneration);
       setApiNotice(
         `생성 Job ${data.meta.jobId} 완료 · ${data.meta.roomAnalysisId ? "방 분석 결과를 반영해 " : ""}실제 상품 카탈로그에서 예산·프롬프트·상품 점수를 다시 계산했습니다.`,
       );
@@ -243,6 +274,7 @@ export default function Home() {
       );
       setShareStatus("공유 링크 복사");
       setGeneration(nextGeneration);
+      setSelectedConceptId(fallbackConcepts[0]?.id ?? null);
       setApiNotice("API 호출이 실패해 브라우저 내 실제 상품 카탈로그 조합으로 대체했습니다.");
       setApiNoticeTone("warning");
     } finally {
@@ -368,7 +400,7 @@ export default function Home() {
           </div>
         </div>
 
-        <section id="demo" className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <section id="demo" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-amber-900/5 ring-1 ring-black/5 sm:p-6">
             <div className="mb-6">
               <p className="text-sm font-bold text-amber-700">STEP 1</p>
@@ -588,6 +620,11 @@ export default function Home() {
                 <div>
                   <p className="text-sm font-bold text-amber-700">STEP 2</p>
                   <h2 className="mt-1 text-2xl font-black">같은 예산의 시안을 비교하세요</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {roomAnalysis
+                      ? `사진 분석 반영: ${roomAnalysis.roomType} · 채광 ${roomAnalysis.lightLevel} · 생활감 ${roomAnalysis.clutterLevel} · ${roomAnalysis.recommendedPromptAdditions.slice(0, 2).join(" / ")}`
+                      : "사진 업로드 전에는 기본 예시를 보여주고, 업로드 후에는 분석 결과에 맞춰 3가지 시안을 자동으로 다시 만듭니다."}
+                  </p>
                 </div>
                 <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800">유지: {keptFurniture.join(", ") || "없음"}</div>
               </div>

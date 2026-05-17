@@ -98,6 +98,54 @@ test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room 
   assert.ok(overlap <= 7, `expected prompt-specific product mix, got ${overlap} overlapping products`);
 });
 
+test("buildInteriorDesignPlan changes Step 2 options when room analysis changes", () => {
+  const brightLivingAnalysis: RoomAnalysis = {
+    ...baseAnalysis,
+    id: "analysis_bright_living",
+    roomType: "거실",
+    lightLevel: "좋음",
+    clutterLevel: "낮음",
+    dominantTones: ["쿨 화이트", "블랙", "실버"],
+    detectedFurniture: ["소파", "커튼", "조명"],
+    opportunities: ["기존 정돈감을 유지하면서 러그와 식물로 포인트 추가"],
+    recommendedPromptAdditions: ["쿨 화이트 블랙 톤 유지", "미니멀 포인트", "자연광을 살리는 배치"],
+  };
+  const clutteredWorkAnalysis: RoomAnalysis = {
+    ...baseAnalysis,
+    id: "analysis_cluttered_work",
+    roomType: "작업방",
+    lightLevel: "낮음",
+    clutterLevel: "높음",
+    dominantTones: ["아이보리", "월넛", "웜 그레이"],
+    detectedFurniture: ["책상", "수납장", "러그"],
+    opportunities: ["책상 주변과 바닥 생활감을 수납 박스·카트로 먼저 정리"],
+    recommendedPromptAdditions: ["아이보리 월넛 톤 유지", "수납 중심", "웜톤 조명 보강", "못질 없이 설치"],
+  };
+
+  const brightPlan = buildInteriorDesignPlan({
+    budget: 500000,
+    prompt: "방을 깔끔하게 꾸미고 싶어요",
+    generation: 1,
+    keptFurniture: [],
+    roomAnalysis: brightLivingAnalysis,
+  });
+  const clutteredPlan = buildInteriorDesignPlan({
+    budget: 500000,
+    prompt: "방을 깔끔하게 꾸미고 싶어요",
+    generation: 2,
+    keptFurniture: [],
+    roomAnalysis: clutteredWorkAnalysis,
+  });
+
+  const brightTopProducts = brightPlan.concepts.map((concept) => concept.products.slice(0, 3).map((product) => product.id).join("/")).join("|");
+  const clutteredTopProducts = clutteredPlan.concepts.map((concept) => concept.products.slice(0, 3).map((product) => product.id).join("/")).join("|");
+
+  assert.notEqual(brightTopProducts, clutteredTopProducts);
+  assert.match(clutteredPlan.promptBrief.normalizedPrompt, /수납 중심/);
+  assert.match(clutteredPlan.promptBrief.normalizedPrompt, /웜톤 조명 보강/);
+  assert.ok(clutteredPlan.concepts[0].highlights.some((highlight) => highlight.includes("방 분석")));
+});
+
 test("buildInteriorDesignPlan exposes metrics for API responses and recent history", () => {
   const plan = buildInteriorDesignPlan({
     budget: 300000,
