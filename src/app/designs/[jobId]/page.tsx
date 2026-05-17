@@ -7,6 +7,7 @@ import {
   buildDesignShareSummary,
   buildDesignShareUrl,
   buildShoppingListShareText,
+  formatProductPrice,
   formatWon,
   getTopValueProducts,
 } from "@/lib/design-share";
@@ -158,7 +159,7 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
                 {topValueProducts.map((product) => (
                   <div key={product.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700">
                     <span>{product.name}</span>
-                    <span>{formatWon(product.price)}</span>
+                    <span>{formatProductPrice(product)}</span>
                   </div>
                 ))}
               </div>
@@ -180,7 +181,7 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
                       <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
-                      <span className="font-black">{formatWon(product.price)}</span>
+                      <span className="font-black">{formatProductPrice(product)}</span>
                       <a href={product.url} target="_blank" rel="noreferrer" className="rounded-full bg-[#ff385c] px-4 py-2 text-sm font-black text-white transition hover:bg-[#e00b41]">
                         보기
                       </a>

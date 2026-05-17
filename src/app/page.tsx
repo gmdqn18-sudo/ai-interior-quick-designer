@@ -5,9 +5,8 @@ import { ChangeEvent, useState } from "react";
 import type { RenderAfterResponse } from "@/lib/after-image";
 import type { DesignGenerationJob, DesignGenerationResponse, RoomAnalysis, RoomAnalysisResponse } from "@/lib/design-api";
 import { buildDesignShareUrl, buildShoppingListShareText } from "@/lib/design-share";
+import { composeDesignGenerationJob } from "@/lib/design-generation";
 import {
-  buildConceptHistory,
-  buildConcepts,
   budgetPresets,
   DesignConcept,
   Product,
@@ -25,9 +24,16 @@ function formatWon(amount: number) {
   return `${formatter.format(amount)}원`;
 }
 
+function formatProductPrice(product: Product) {
+  if (product.quantity && product.quantity > 1) {
+    return `${formatWon(product.price)} (${formatWon(product.unitPrice ?? Math.round(product.price / product.quantity))} × ${product.quantity})`;
+  }
+  return formatWon(product.price);
+}
+
 function buildShoppingListText(concept: DesignConcept, budget: number) {
   const productLines = concept.products
-    .map((product, index) => `${index + 1}. ${product.name} / ${formatWon(product.price)} / ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
+    .map((product, index) => `${index + 1}. ${product.name} / ${formatProductPrice(product)} / ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
     .join("\n");
 
   return `[RoomFit AI] ${concept.title}\n설정 예산: ${formatWon(budget)}\n사용 금액: ${formatWon(
@@ -35,45 +41,42 @@ function buildShoppingListText(concept: DesignConcept, budget: number) {
   )}\n남은 예산: ${formatWon(budget - concept.usedBudget)}\n\n${productLines}`;
 }
 
-function buildClientFallbackJob({
+function buildClientDesignResponse({
   budget,
   prompt,
   generation,
   keptFurniture,
   roomAnalysis,
-  concepts,
-  history,
 }: {
   budget: number;
   prompt: string;
   generation: number;
   keptFurniture: string[];
   roomAnalysis?: RoomAnalysis | null;
-  concepts: DesignConcept[];
-  history: DesignConcept[];
-}): DesignGenerationJob {
-  const usedBudgets = concepts.map((concept) => concept.usedBudget);
+}): DesignGenerationResponse {
+  const job = composeDesignGenerationJob(
+    { budget, prompt, generation, keptFurniture, roomAnalysis: roomAnalysis ?? null },
+    {
+      id: `fallback_${Date.now().toString(36)}`,
+      createdAt: new Date().toISOString(),
+      mode: "browser-fallback",
+    },
+  );
 
   return {
-    id: `fallback_${Date.now().toString(36)}`,
-    createdAt: new Date().toISOString(),
-    status: "completed",
-    mode: "browser-fallback",
-    budget,
-    prompt,
-    generation,
-    keptFurniture,
-    roomAnalysis: roomAnalysis ?? null,
-    concepts,
-    history,
-    metrics: {
-      conceptCount: concepts.length,
-      historyCount: history.length,
-      averageBudgetFitScore: Math.round(
-        concepts.reduce((sum, concept) => sum + concept.budgetFitScore, 0) / Math.max(concepts.length, 1),
-      ),
-      cheapestConceptUsedBudget: Math.min(...usedBudgets),
-      highestConceptUsedBudget: Math.max(...usedBudgets),
+    job,
+    concepts: job.concepts,
+    history: job.history,
+    meta: {
+      jobId: job.id,
+      createdAt: job.createdAt,
+      budget,
+      generation,
+      keptFurniture,
+      promptLength: prompt.length,
+      mode: job.mode,
+      status: job.status,
+      roomAnalysisId: roomAnalysis?.id,
     },
   };
 }
@@ -167,13 +170,45 @@ function getProductOverlayPlacement(product: Product): ProductOverlayPlacement {
   };
 }
 
+function getConceptDecisionGuide(concept: DesignConcept) {
+  const categories = Array.from(new Set(concept.products.map((product) => product.category))).slice(0, 4).join(" · ") || "상품 조합";
+
+  if (concept.title.includes("수납") || concept.title.includes("정리")) {
+    return {
+      bestFor: "바닥·책상 주변 생활감이 가장 거슬릴 때",
+      impact: "정리 후 넓어 보이는 체감 변화",
+      tradeoff: "사진 분위기보다 수납/동선 개선을 우선합니다.",
+      firstAction: "이동식 수납과 정리 소품부터 구매",
+      categories,
+    };
+  }
+
+  if (concept.title.includes("조명") || concept.title.includes("패브릭") || concept.title.includes("무드")) {
+    return {
+      bestFor: "Before/After 사진 차이를 크게 만들고 싶을 때",
+      impact: "조명·러그·커튼으로 분위기 즉시 전환",
+      tradeoff: "수납 문제 해결력은 상대적으로 낮습니다.",
+      firstAction: "조명과 큰 면적 패브릭부터 교체",
+      categories,
+    };
+  }
+
+  return {
+    bestFor: "한쪽으로 치우치지 않고 실패 확률을 낮추고 싶을 때",
+    impact: "예산 안에서 수납·조명·톤 보정을 균형 있게 반영",
+    tradeoff: "가장 강한 한 방보다는 안전한 평균점을 선택합니다.",
+    firstAction: "체감 변화가 큰 상위 3개부터 구매",
+    categories,
+  };
+}
+
 export default function Home() {
   const [budget, setBudget] = useState(300000);
-  const [prompt, setPrompt] = useState("30만 원 이하로 따뜻한 우드톤 자취방처럼 꾸며줘. 책상은 그대로 두고 수납을 늘리고 싶어.");
-  const [keptFurniture, setKeptFurniture] = useState<string[]>(["책상"]);
+  const [prompt, setPrompt] = useState("");
+  const [keptFurniture, setKeptFurniture] = useState<string[]>([]);
   const [generation, setGeneration] = useState(1);
-  const [concepts, setConcepts] = useState<DesignConcept[]>(() => buildConcepts(300000, prompt, 1));
-  const [conceptHistory, setConceptHistory] = useState<DesignConcept[]>(() => buildConceptHistory(300000, prompt, 1));
+  const [concepts, setConcepts] = useState<DesignConcept[]>(() => buildClientDesignResponse({ budget: 300000, prompt: "", generation: 1, keptFurniture: [] }).concepts);
+  const [conceptHistory, setConceptHistory] = useState<DesignConcept[]>(() => buildClientDesignResponse({ budget: 300000, prompt: "", generation: 1, keptFurniture: [] }).history);
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
@@ -321,27 +356,9 @@ export default function Home() {
       setApiNoticeTone("success");
       void refreshRecentJobs();
     } catch {
-      const fallbackConcepts = buildConcepts(budget, prompt, nextGeneration);
-      const fallbackHistory = buildConceptHistory(budget, prompt, nextGeneration);
-      setConcepts(fallbackConcepts);
-      setConceptHistory(fallbackHistory);
-      setCurrentJob(
-        buildClientFallbackJob({
-          budget,
-          prompt,
-          generation: nextGeneration,
-          keptFurniture,
-          roomAnalysis,
-          concepts: fallbackConcepts,
-          history: fallbackHistory,
-        }),
-      );
-      setShareStatus("공유 링크 복사");
-      setGeneration(nextGeneration);
-      setSelectedConceptId(fallbackConcepts[0]?.id ?? null);
-      setActiveProductId(null);
-      setHasGeneratedDesign(true);
-      setApiNotice("API 호출이 실패해 브라우저 내 실제 상품 카탈로그 조합으로 대체했습니다.");
+      const fallbackData = buildClientDesignResponse({ budget, prompt, generation: nextGeneration, keptFurniture, roomAnalysis });
+      applyDesignResponse(fallbackData, nextGeneration);
+      setApiNotice("API 호출이 실패해도 같은 추천 엔진으로 브라우저에서 재계산했습니다. 서버/클라이언트 결과 구조는 동일합니다.");
       setApiNoticeTone("warning");
     } finally {
       setIsGenerating(false);
@@ -532,6 +549,7 @@ export default function Home() {
                   id="prompt"
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
+                  placeholder="예: 블랙·그레이 톤의 모던한 작업방으로, 책상은 그대로 두고 케이블과 수납을 정리하고 싶어요."
                   aria-invalid={!isPromptReady}
                   className="mt-2 min-h-28 w-full rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 outline-none transition focus:border-amber-400 focus:bg-white"
                 />
@@ -700,87 +718,92 @@ export default function Home() {
               <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                 <div>
                   <p className="text-sm font-black text-[#ff385c]">STEP 2</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">같은 예산의 시안을 비교하세요</h2>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">어떤 문제를 먼저 해결할지 선택하세요</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {roomAnalysis
-                      ? `사진 분석 반영: ${roomAnalysis.roomType} · 채광 ${roomAnalysis.lightLevel} · 생활감 ${roomAnalysis.clutterLevel} · ${roomAnalysis.recommendedPromptAdditions.slice(0, 2).join(" / ")}`
-                      : "사진 업로드 전에는 기본 예시를 보여주고, 업로드 후에는 분석 결과에 맞춰 3가지 시안을 자동으로 다시 만듭니다."}
+                    같은 예산이라도 “수납”, “분위기”, “안전한 균형” 중 우선순위에 따라 구매 순서와 결과 이미지가 달라집니다. 마음에 드는 방향을 고르면 Step 3의 구매 플랜이 즉시 바뀝니다.
                   </p>
                 </div>
-                <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800">유지: {keptFurniture.join(", ") || "없음"}</div>
+                <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800">유지: {keptFurniture.join(", ") || "직접 선택 없음"}</div>
               </div>
 
-              <div className="grid gap-3">
-                {concepts.map((concept) => (
-                  <button
-                    key={concept.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedConceptId(concept.id);
-                      setActiveProductId(null);
-                    }}
-                    className={`rounded-[1.75rem] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
-                      selectedConcept.id === concept.id ? "border-[#ff385c] bg-[#222222] text-white shadow-xl shadow-slate-950/15" : "border-slate-200 bg-white hover:border-rose-300 hover:shadow-lg"
-                    }`}
-                  >
-                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                      <div>
-                        <h3 className="text-lg font-black">{concept.title}</h3>
-                        <p className={`mt-1 text-sm leading-6 ${selectedConcept.id === concept.id ? "text-slate-200" : "text-slate-600"}`}>{concept.strategy}</p>
-                      </div>
-                      <div className="shrink-0 rounded-2xl bg-white/15 px-3 py-2 text-sm font-black">{formatWon(concept.usedBudget)}</div>
-                    </div>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                      <Score label="예산" value={concept.budgetFitScore} active={selectedConcept.id === concept.id} />
-                      <Score label="구매 가능" value={concept.feasibilityScore} active={selectedConcept.id === concept.id} />
-                      <Score label="구조 유지" value={concept.roomStructureScore} active={selectedConcept.id === concept.id} />
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200">
-                <div className="grid grid-cols-4 bg-slate-50 px-4 py-3 text-xs font-black text-slate-500">
-                  <span>시안</span>
-                  <span>총액</span>
-                  <span>핵심</span>
-                  <span>점수</span>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-xs font-black text-slate-500">현재 판단 기준</div>
+                    <p className="mt-1 text-sm font-bold leading-6 text-slate-800">
+                      {roomAnalysis
+                        ? `${roomAnalysis.roomType} · 채광 ${roomAnalysis.lightLevel} · 생활감 ${roomAnalysis.clutterLevel}`
+                        : "사진 분석 없음 · 입력한 예산/취향 기준"}
+                    </p>
+                  </div>
+                  <div className="text-xs font-bold leading-5 text-slate-500 sm:text-right">
+                    선택한 방향: <span className="text-[#ff385c]">{selectedConcept.title}</span><br />
+                    예산 사용: {formatWon(selectedConcept.usedBudget)} / {formatWon(budget)}
+                  </div>
                 </div>
-                {concepts.map((concept) => (
-                  <button
-                    key={`table-${concept.id}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedConceptId(concept.id);
-                      setActiveProductId(null);
-                    }}
-                    className="grid w-full grid-cols-4 items-center px-4 py-3 text-left text-xs font-semibold hover:bg-amber-50"
-                  >
-                    <span className="truncate pr-2">{concept.title}</span>
-                    <span>{formatWon(concept.usedBudget)}</span>
-                    <span>{concept.highlights[0]}</span>
-                    <span>{concept.budgetFitScore}점</span>
-                  </button>
-                ))}
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                {concepts.map((concept) => {
+                  const isSelected = selectedConcept.id === concept.id;
+                  const guide = getConceptDecisionGuide(concept);
+
+                  return (
+                    <button
+                      key={concept.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedConceptId(concept.id);
+                        setActiveProductId(null);
+                      }}
+                      className={`flex h-full flex-col rounded-[1.75rem] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
+                        isSelected ? "border-[#ff385c] bg-[#222222] text-white shadow-xl shadow-slate-950/15" : "border-slate-200 bg-white hover:border-rose-300 hover:shadow-lg"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className={`mb-2 inline-flex rounded-full px-3 py-1 text-[11px] font-black ${isSelected ? "bg-[#ff385c] text-white" : "bg-rose-50 text-[#ff385c]"}`}>
+                            {isSelected ? "현재 선택" : "선택 가능"}
+                          </div>
+                          <h3 className="text-lg font-black">{concept.title}</h3>
+                        </div>
+                        <div className={`shrink-0 rounded-2xl px-3 py-2 text-sm font-black ${isSelected ? "bg-white/15" : "bg-slate-100 text-slate-900"}`}>{formatWon(concept.usedBudget)}</div>
+                      </div>
+
+                      <p className={`mt-3 text-sm leading-6 ${isSelected ? "text-slate-200" : "text-slate-600"}`}>{concept.strategy}</p>
+
+                      <div className="mt-4 grid gap-2 text-xs font-bold">
+                        <div className={`rounded-2xl p-3 ${isSelected ? "bg-white/10 text-white" : "bg-slate-50 text-slate-700"}`}>
+                          <span className={isSelected ? "text-rose-200" : "text-[#ff385c]"}>이런 경우 선택</span><br />{guide.bestFor}
+                        </div>
+                        <div className={`rounded-2xl p-3 ${isSelected ? "bg-white/10 text-white" : "bg-slate-50 text-slate-700"}`}>
+                          <span className={isSelected ? "text-rose-200" : "text-[#ff385c]"}>첫 실행</span><br />{guide.firstAction}
+                        </div>
+                        <div className={`rounded-2xl p-3 ${isSelected ? "bg-white/10 text-white" : "bg-slate-50 text-slate-700"}`}>
+                          <span className={isSelected ? "text-rose-200" : "text-[#ff385c]"}>포기하는 점</span><br />{guide.tradeoff}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 text-center sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                        <Score label="예산" value={concept.budgetFitScore} active={isSelected} />
+                        <Score label="구매" value={concept.feasibilityScore} active={isSelected} />
+                        <Score label="구조" value={concept.roomStructureScore} active={isSelected} />
+                      </div>
+
+                      <div className={`mt-4 rounded-2xl px-3 py-2 text-xs font-bold ${isSelected ? "bg-white/10 text-slate-200" : "bg-amber-50 text-amber-800"}`}>
+                        핵심 품목: {guide.categories}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="mt-5 rounded-3xl bg-amber-50 p-4">
-                <div className="text-sm font-black text-amber-900">최근 생성 히스토리</div>
-                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                  {conceptHistory.map((concept) => (
-                    <button
-                      key={`history-${concept.id}`}
-                      type="button"
-                      onClick={() => {
-                      setSelectedConceptId(concept.id);
-                      setActiveProductId(null);
-                    }}
-                      className="min-w-44 rounded-2xl bg-white p-3 text-left text-xs shadow-sm ring-1 ring-black/5"
-                    >
-                      <div className="font-black">{concept.title.replace(" 시안", "")}</div>
-                      <div className="mt-1 text-slate-500">{formatWon(concept.usedBudget)} · {concept.budgetFitScore}점</div>
-                    </button>
-                  ))}
+                <div className="text-sm font-black text-amber-900">선택 후 달라지는 것</div>
+                <div className="mt-3 grid gap-2 text-xs font-bold text-slate-700 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white p-3 shadow-sm">Step 3 구매 우선순위가 선택한 방향 기준으로 바뀝니다.</div>
+                  <div className="rounded-2xl bg-white p-3 shadow-sm">수정 후 이미지 생성 프롬프트가 선택 시안의 상품/전략을 사용합니다.</div>
+                  <div className="rounded-2xl bg-white p-3 shadow-sm">유지할 가구는 Step 1에서 직접 선택한 항목만 반영합니다.</div>
                 </div>
               </div>
             </div>
@@ -918,7 +941,7 @@ export default function Home() {
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>
                           <div className="min-w-0">
                             <div className="truncate text-xs font-black">{product.name}</div>
-                            <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} 바로 열기 · {formatWon(product.price)}</div>
+                            <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} 바로 열기 · {formatProductPrice(product)}</div>
                             <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">배치 후보: {getProductPlacement(product)}</div>
                           </div>
                         </div>
@@ -965,7 +988,7 @@ export default function Home() {
                               ) : null}
                             </div>
                             <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                              <span className="font-black">{formatWon(product.price)}</span>
+                              <span className="font-black">{formatProductPrice(product)}</span>
                               <a href={purchaseUrl} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white">
                                 {product.source}에서 열기
                               </a>
@@ -1010,7 +1033,7 @@ export default function Home() {
                                 ) : null}
                               </div>
                               <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                                <span className="font-black">{formatWon(product.price)}</span>
+                                <span className="font-black">{formatProductPrice(product)}</span>
                                 <a href={purchaseUrl} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white">
                                   {product.source}에서 열기
                                 </a>

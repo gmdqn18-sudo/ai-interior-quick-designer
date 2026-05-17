@@ -21,6 +21,13 @@ export function formatWon(amount: number) {
   return `${wonFormatter.format(amount)}원`;
 }
 
+export function formatProductPrice(product: Product) {
+  if (product.quantity && product.quantity > 1) {
+    return `${formatWon(product.price)} (${formatWon(product.unitPrice ?? Math.round(product.price / product.quantity))} × ${product.quantity})`;
+  }
+  return formatWon(product.price);
+}
+
 export function buildDesignShareUrl(origin: string, jobId: string) {
   return `${origin.replace(/\/$/, "")}/designs/${jobId}`;
 }
@@ -40,7 +47,7 @@ export function getTopValueProducts(job: DesignGenerationJob, limit = 3): Produc
 export function buildShoppingListShareText(job: DesignGenerationJob, shareUrl?: string) {
   const concept = job.concepts[0];
   const productLines = (concept?.products ?? [])
-    .map((product, index) => `${index + 1}. ${product.name} - ${formatWon(product.price)} - ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
+    .map((product, index) => `${index + 1}. ${product.name} - ${formatProductPrice(product)} - ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
     .join("\n");
   const lines = [
     `[RoomFit AI] ${concept?.title ?? "인테리어 시안"}`,

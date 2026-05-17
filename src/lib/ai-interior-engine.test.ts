@@ -72,6 +72,55 @@ test("buildInteriorDesignPlan scales recommendations toward a premium budget whi
   assert.ok(plan.concepts.every((concept) => concept.products.length <= 12));
 });
 
+test("buildInteriorDesignPlan separates space type from style instead of hardcoding commercial as cafe", () => {
+  const cases = [
+    {
+      prompt: "카페를 창업하려고 하는데, 블랙과 스틸 중심의 모던한 느낌으로 꾸며주세요.",
+      spaceType: "cafe",
+      styleTag: "dark-modern",
+      titlePattern: /카페 .*블랙·모던.*균형 시안/,
+      forbidden: /트렌디 카페/,
+    },
+    {
+      prompt: "오피스 리디자인을 하고 싶어요. 쿨톤 화이트와 실버로 미니멀하게 정리해주세요.",
+      spaceType: "office",
+      styleTag: "minimal",
+      titlePattern: /오피스 .*쿨톤·미니멀.*균형 시안/,
+      forbidden: /카페/,
+    },
+    {
+      prompt: "쇼룸 매장 인테리어를 우드톤으로 따뜻하고 고급스럽게 바꾸고 싶습니다.",
+      spaceType: "showroom",
+      styleTag: "warm-tone",
+      titlePattern: /쇼룸 .*따뜻한 우드톤.*균형 시안/,
+      forbidden: /카페/,
+    },
+  ] as const;
+
+  for (const item of cases) {
+    const plan = buildInteriorDesignPlan({
+      budget: 9_970_000,
+      prompt: item.prompt,
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    });
+    const visibleCopy = plan.concepts.map((concept) => `${concept.title} ${concept.strategy} ${concept.highlights.join(" ")}`).join(" ");
+    const highestUsedBudget = Math.max(...plan.concepts.map((concept) => concept.usedBudget));
+    const lineItems = plan.concepts.flatMap((concept) => concept.products);
+
+    assert.equal(plan.promptBrief.spaceType, item.spaceType);
+    assert.ok(plan.promptBrief.priorityTags.includes("commercial"), `${item.spaceType} should retain commercial as a space-character tag`);
+    assert.ok(plan.promptBrief.styleTags.includes(item.styleTag));
+    assert.match(plan.concepts[0].title, item.titlePattern);
+    assert.doesNotMatch(visibleCopy, item.forbidden);
+    assert.ok(highestUsedBudget >= 7_000_000, `expected at least 7,000,000원 used for ${item.spaceType}, got ${highestUsedBudget}`);
+    assert.ok(plan.concepts.every((concept) => concept.usedBudget <= 9_970_000));
+    assert.ok(lineItems.some((product) => product.quantity && product.quantity > 1), `${item.spaceType} large budgets should use quantity-aware line items`);
+    assert.ok(lineItems.every((product) => product.linkType === "product-detail"));
+  }
+});
+
 test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room prompt", () => {
   const ghibliPlan = buildInteriorDesignPlan({
     budget: 1_000_000,
@@ -96,6 +145,10 @@ test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room 
   assert.match(ghibliTopSix, /내추럴|호두나무|참나무|숲속의 동화|쿠션|커피테이블/);
   assert.ok(!ghibliTopSix.includes("데스크"), `Ghibli living-room top products should not be desk-heavy: ${ghibliTopSix}`);
   assert.ok(ghibliPlan.concepts.every((concept) => concept.products.every((product) => product.category !== "침구")), "living-room Ghibli plans should avoid bedroom bedding items");
+  assert.ok(
+    ghibliPlan.concepts.every((concept) => !`${concept.title} ${concept.strategy} ${concept.highlights.join(" ")}`.includes("침구")),
+    "living-room Ghibli visible copy should avoid bedroom bedding language",
+  );
   assert.ok(
     ghibliPlan.concepts.every((concept) => concept.products.filter((product) => product.category === "러그").length <= 1),
     "living-room Ghibli plans should not pad the budget with duplicate rugs",
@@ -149,6 +202,22 @@ test("buildInteriorDesignPlan changes Step 2 options when room analysis changes"
   assert.match(clutteredPlan.promptBrief.normalizedPrompt, /수납 중심/);
   assert.match(clutteredPlan.promptBrief.normalizedPrompt, /웜톤 조명 보강/);
   assert.ok(clutteredPlan.concepts[0].highlights.some((highlight) => highlight.includes("방 분석")));
+});
+
+test("buildInteriorDesignPlan changes visible style copy for dark modern prompts instead of forcing warm wood tone", () => {
+  const plan = buildInteriorDesignPlan({
+    budget: 300000,
+    prompt: "블랙 그레이 톤의 모던한 작업방. 책상은 그대로 두고 케이블 수납 정리",
+    generation: 1,
+    keptFurniture: ["책상"],
+    roomAnalysis: null,
+  });
+  const visibleCopy = plan.concepts.map((concept) => `${concept.title} ${concept.strategy} ${concept.highlights.join(" ")}`).join(" ");
+
+  assert.ok(plan.promptBrief.priorityTags.includes("dark-modern"));
+  assert.match(visibleCopy, /블랙·모던/);
+  assert.doesNotMatch(visibleCopy, /따뜻한 우드톤/);
+  assert.ok(plan.concepts[0].palette.includes("zinc") || plan.concepts[0].palette.includes("slate"));
 });
 
 test("buildInteriorDesignPlan exposes metrics for API responses and recent history", () => {

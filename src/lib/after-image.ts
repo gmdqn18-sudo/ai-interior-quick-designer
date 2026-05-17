@@ -69,6 +69,22 @@ export function imageDataUrlToBlobParts(imageDataUrl: string): ParsedImageData {
   };
 }
 
+function inferImageContext(input: { concept: DesignConcept; userPrompt: string }) {
+  const text = `${input.concept.title} ${input.concept.strategy} ${input.userPrompt}`;
+  if (hasAnyText(text, ["카페", "커피숍", "창업"])) return "Korean cafe commercial context: realistic customer seating, service counter, circulation, and purchase-realistic decor.";
+  if (hasAnyText(text, ["오피스", "사무실", "회의실", "워크스페이스", "업무공간"])) return "Korean office workspace context: realistic desks, collaboration zones, storage, lighting, and employee circulation.";
+  if (hasAnyText(text, ["쇼룸", "전시장", "전시 공간"])) return "Korean showroom retail context: realistic product display zones, customer circulation, accent lighting, and brand presentation.";
+  if (hasAnyText(text, ["매장", "상점", "리테일", "편집샵", "샵", "업장"])) return "Korean retail store commercial context: realistic merchandising, customer circulation, lighting, and purchase-realistic decor.";
+  if (hasAnyText(text, ["스튜디오", "촬영", "작업실"])) return "Korean studio workspace context: realistic work zones, equipment clearance, lighting, and storage.";
+  if (hasAnyText(text, ["침실", "침대", "호텔식"])) return "Korean bedroom residential context: renter-friendly and realistic, with bed-area scale and circulation preserved.";
+  if (hasAnyText(text, ["거실", "소파", "라운지"])) return "Korean living-room residential context: renter-friendly and realistic, with seating scale and circulation preserved.";
+  return "Korean residential room context: renter-friendly and realistic, based on the user's prompt rather than a fixed bedroom or studio-apartment default.";
+}
+
+function hasAnyText(text: string, keywords: string[]) {
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
 export function buildAfterImagePrompt(input: {
   concept: DesignConcept;
   userPrompt: string;
@@ -77,6 +93,7 @@ export function buildAfterImagePrompt(input: {
   const productNames = input.concept.products.slice(0, 6).map((product) => `${product.category}: ${product.name}`);
   const keptFurnitureText = input.keptFurniture.length > 0 ? input.keptFurniture.join(", ") : "no specific furniture";
   const highlights = input.concept.highlights.join(", ");
+  const imageContext = inferImageContext(input);
 
   return [
     "Use the provided room photo as the locked reference frame for an image-to-image interior edit.",
@@ -85,14 +102,14 @@ export function buildAfterImagePrompt(input: {
     "Preserve the original room geometry and fixed architecture: walls, floor, ceiling lines, door, window, radiator, curtain rail, built-in structures, and visible room boundaries.",
     "Preserve the real placement scale of major furniture unless explicitly replaced: bed area, desk/chair zone, wardrobe/storage zone, and circulation paths must stay recognizable from the original photo.",
     "Edit the existing room in-place: declutter, recolor, restyle, add realistic renter-friendly decor and purchasable items, but keep the Before/After comparable from the same shot.",
-    "This is a Korean small room / bedroom / studio apartment context, renter-friendly and realistic.",
+    imageContext,
     `Design concept title: ${input.concept.title}`,
     `Design strategy: ${input.concept.strategy}`,
-    `User requested mood and constraints: ${input.userPrompt || "budget-friendly warm minimal room"}`,
+    `User requested mood and constraints: ${input.userPrompt || "use only the selected concept, retained furniture, and analyzed room constraints; do not invent an extra default style"}`,
     `Furniture to keep and visually retain in the same approximate location: ${keptFurnitureText}`,
     `Key highlights: ${highlights}`,
     `Recommended items to reflect visually: ${productNames.join("; ")}`,
-    "Make the room cleaner, staged, and purchase-realistic, not a luxury mansion or showroom.",
+    "Make the edited space cleaner, staged, and purchase-realistic, not an unrelated luxury reference scene.",
     "The final image must feel like the same photo after interior changes, not a newly photographed reference room.",
     "No text, no labels, no watermark, no people, no extra UI elements.",
   ].join("\n");

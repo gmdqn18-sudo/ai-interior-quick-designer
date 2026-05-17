@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildConcepts, getProductPurchaseUrl, productPool, type Product } from "./interior-design";
+import { getProductPurchaseUrl, productPool, type Product } from "./interior-design";
 
 test("productPool contains only verified real product-detail links", () => {
   assert.ok(productPool.length >= 20);
@@ -14,17 +14,6 @@ test("productPool contains only verified real product-detail links", () => {
     assert.match(product.verifiedAt, /^2026-05-17$/);
     assert.ok(!product.name.includes("무드 테이블 램프"), "catalog must not contain imagined generic product names");
   }
-});
-
-test("buildConcepts scales selected real products toward a high user budget", () => {
-  const concepts = buildConcepts(1_000_000, "우드톤 수납 조명 호텔식", 1);
-  const highestUsedBudget = Math.max(...concepts.map((concept) => concept.usedBudget));
-
-  assert.ok(highestUsedBudget >= 600_000, `expected at least 600,000원 used, got ${highestUsedBudget}`);
-  assert.ok(concepts.every((concept) => concept.usedBudget <= 1_000_000));
-  assert.ok(concepts.some((concept) => concept.products.length >= 8));
-  assert.ok(concepts.every((concept) => concept.products.length <= 12));
-  assert.ok(concepts.every((concept) => concept.products.every((product) => product.linkType === "product-detail")));
 });
 
 test("getProductPurchaseUrl returns the verified product detail page instead of a search fallback", () => {

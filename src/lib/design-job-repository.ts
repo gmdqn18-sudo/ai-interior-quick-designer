@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { buildInteriorDesignPlan } from "./ai-interior-engine";
+import { composeDesignGenerationJob } from "./design-generation";
 import type { DesignGenerationJob, DesignGenerationRequest } from "./design-api";
 
 const MAX_STORED_JOBS = 20;
@@ -52,21 +52,11 @@ function pruneJobs() {
 }
 
 export function createRealDesignJob(input: DesignGenerationRequest): DesignGenerationJob {
-  const plan = buildInteriorDesignPlan(input);
-  const job: DesignGenerationJob = {
+  const job = composeDesignGenerationJob(input, {
     id: makeJobId(),
     createdAt: new Date().toISOString(),
-    status: "completed",
     mode: "real-product-composition",
-    budget: input.budget,
-    prompt: input.prompt,
-    generation: input.generation,
-    keptFurniture: input.keptFurniture,
-    roomAnalysis: input.roomAnalysis ?? null,
-    concepts: plan.concepts,
-    history: plan.history,
-    metrics: plan.metrics,
-  };
+  });
 
   jobs.set(job.id, job);
   pruneJobs();

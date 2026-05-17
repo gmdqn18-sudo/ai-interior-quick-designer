@@ -4,6 +4,8 @@ export type Product = {
   name: string;
   category: string;
   price: number;
+  unitPrice?: number;
+  quantity?: number;
   source: "이케아";
   url: string;
   linkType: "product-detail";
@@ -478,114 +480,3 @@ export function getSubstitute(product: Product) {
   );
 }
 
-export function buildConcepts(budget: number, prompt: string, generation: number): DesignConcept[] {
-  const concepts: Array<Omit<DesignConcept, "usedBudget"> & { productIds: string[] }> = [
-    {
-      id: `mood-${generation}`,
-      title: "무드 조명·러그 중심 시안",
-      strategy: "가구를 크게 바꾸지 않고 조명, 러그, 커튼으로 분위기를 빠르게 전환합니다.",
-      budgetFitScore: 96,
-      feasibilityScore: 91,
-      roomStructureScore: 94,
-      palette: "bg-gradient-to-br from-amber-100 via-stone-100 to-orange-200",
-      highlights: ["월세방도 부담 없는 변화", "따뜻한 우드톤 강조", "가성비 높은 체감 변화"],
-      productIds: [
-        "ikea-dejsa-table-lamp",
-        "ikea-lohals-rug",
-        "ikea-ringblomma-blind-beige",
-        "ikea-holmerud-side-table-oak",
-        "ikea-fejka-grass-pot",
-      ],
-      products: [],
-    },
-    {
-      id: `storage-${generation}`,
-      title: "수납·정리 중심 시안",
-      strategy: "책상과 침대는 유지하고 이동식 수납과 무타공 선반으로 생활감을 줄입니다.",
-      budgetFitScore: 93,
-      feasibilityScore: 95,
-      roomStructureScore: 90,
-      palette: "bg-gradient-to-br from-sky-100 via-white to-slate-200",
-      highlights: ["기존 가구 유지", "수납 부족 해결", "못질 없이 설치 가능"],
-      productIds: [
-        "ikea-nissafors-trolley-white",
-        "ikea-skadis-pegboard",
-        "ikea-billy-bookcase-white",
-        "ikea-mosslanda-picture-ledge",
-        "ikea-kabbleka-led-strip",
-      ],
-      products: [],
-    },
-    {
-      id: `bedding-${generation}`,
-      title: "침구·협탁 중심 호텔식 시안",
-      strategy: "침대 주변의 큰 면적을 정리해 적은 품목으로 호텔식 인상을 만듭니다.",
-      budgetFitScore: 89,
-      feasibilityScore: 88,
-      roomStructureScore: 92,
-      palette: "bg-gradient-to-br from-zinc-100 via-white to-stone-300",
-      highlights: ["사진발 좋은 Before/After", "침실 무드 강화", "깔끔한 화이트톤"],
-      productIds: [
-        "ikea-nattjasmin-bedding-white",
-        "ikea-nesna-bedside-table",
-        "ikea-arstid-table-lamp",
-        "ikea-stoense-rug-large",
-        "ikea-ringblomma-blind-beige",
-      ],
-      products: [],
-    },
-  ];
-
-  return concepts.map((concept, index) => {
-    const products: Product[] = [];
-    let total = 0;
-    const budgetCap = Math.max(10000, Math.floor(budget * 0.96));
-    const targetSpend = budget >= 700000 ? Math.floor(budget * 0.72) : budget >= 300000 ? Math.floor(budget * 0.65) : 0;
-    const maxProducts = budget >= 700000 ? 12 : budget >= 300000 ? 8 : 5;
-
-    for (const id of concept.productIds) {
-      const product = productPool.find((item) => item.id === id);
-      if (!product) continue;
-      if (total + product.price <= budgetCap) {
-        products.push(product);
-        total += product.price;
-      }
-    }
-
-    if (targetSpend > 0 && total < targetSpend) {
-      const preferredCategories = new Set(products.map((product) => product.category));
-      const fillers = productPool
-        .filter((product) => !products.some((item) => item.id === product.id))
-        .sort((a, b) => {
-          const categoryScore = Number(preferredCategories.has(b.category)) - Number(preferredCategories.has(a.category));
-          if (categoryScore !== 0) return categoryScore;
-          return b.price - a.price;
-        });
-
-      for (const product of fillers) {
-        if (products.length >= maxProducts) break;
-        if (total + product.price > budgetCap) continue;
-        products.push(product);
-        total += product.price;
-        if (products.length >= maxProducts) break;
-      }
-    }
-
-    const promptBonus = prompt.includes("수납") && concept.id.startsWith("storage") ? 3 : 0;
-    const scoreShift = (generation + index) % 4;
-
-    return {
-      ...concept,
-      id: `${concept.id}-${index}`,
-      products,
-      usedBudget: total,
-      budgetFitScore: Math.min(99, concept.budgetFitScore + promptBonus - scoreShift),
-      feasibilityScore: Math.min(99, concept.feasibilityScore + promptBonus),
-      roomStructureScore: concept.roomStructureScore,
-    };
-  });
-}
-
-export function buildConceptHistory(budget: number, prompt: string, generation: number) {
-  return Array.from({ length: generation }, (_, index) => buildConcepts(budget, prompt, generation - index)).flat().slice(0, 9);
-}
