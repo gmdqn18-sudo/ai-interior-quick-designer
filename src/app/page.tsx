@@ -117,6 +117,7 @@ export default function Home() {
   const [currentJob, setCurrentJob] = useState<DesignGenerationJob | null>(null);
   const [recentJobs, setRecentJobs] = useState<DesignGenerationJob[]>([]);
   const [shareStatus, setShareStatus] = useState("공유 링크 복사");
+  const [hasGeneratedDesign, setHasGeneratedDesign] = useState(false);
 
   const selectedConcept =
     concepts.find((concept) => concept.id === selectedConceptId) ??
@@ -149,6 +150,7 @@ export default function Home() {
     setShareStatus("공유 링크 복사");
     setGeneration(nextGeneration);
     setSelectedConceptId(data.concepts[0]?.id ?? null);
+    setHasGeneratedDesign(true);
   };
 
   const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -182,32 +184,12 @@ export default function Home() {
       const data = (await response.json()) as RoomAnalysisResponse;
       setRoomAnalysis(data.analysis);
       setAnalysisNotice(`분석 완료: ${data.analysis.summary}`);
-
-      try {
-        const nextGeneration = generation + 1;
-        setIsGenerating(true);
-        setApiNotice("방 사진 분석 결과를 반영해 Step 2 시안 3가지를 다시 계산하는 중입니다...");
-        setApiNoticeTone("neutral");
-
-        const designResponse = await fetch("/api/designs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ budget, prompt, generation: nextGeneration, keptFurniture, roomAnalysis: data.analysis }),
-        });
-
-        if (!designResponse.ok) {
-          throw new Error("Design API failed after room analysis");
-        }
-
-        const designData = (await designResponse.json()) as DesignGenerationResponse;
-        applyDesignResponse(designData, nextGeneration);
-        setApiNotice(`사진 분석 반영 완료 · ${data.analysis.roomType} · 채광 ${data.analysis.lightLevel} · 생활감 ${data.analysis.clutterLevel} 기준으로 Step 2 시안이 갱신되었습니다.`);
-        setApiNoticeTone("success");
-        void refreshRecentJobs();
-      } catch {
-        setApiNotice("사진 분석은 완료됐지만 시안 자동 갱신에 실패했습니다. 아래 버튼을 눌러 다시 계산해 주세요.");
-        setApiNoticeTone("warning");
-      }
+      setApiNotice(
+        hasGeneratedDesign
+          ? "방 사진 분석이 바뀌었습니다. Step 1 완료 버튼을 다시 누르면 새 분석을 반영해 Step 2+3을 다시 만듭니다."
+          : "방 사진 분석이 완료되었습니다. 예산과 취향을 확인한 뒤 Step 1 완료 버튼을 누르면 시안을 만듭니다.",
+      );
+      setApiNoticeTone("neutral");
     } catch {
       setRoomAnalysis(null);
       setAnalysisNotice("사진 분석 API 호출이 실패했습니다. 시안 생성은 텍스트 조건만으로 계속할 수 있습니다.");
@@ -236,6 +218,8 @@ export default function Home() {
     setIsGenerating(true);
     setSelectedConceptId(null);
     setCopyStatus("쇼핑 리스트 복사");
+    setApiNotice(roomAnalysis ? "방 분석·예산·프롬프트를 반영해 Step 2+3을 생성하는 중입니다..." : "예산과 프롬프트를 반영해 Step 2+3을 생성하는 중입니다...");
+    setApiNoticeTone("neutral");
     setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. AI 이미지는 참고용으로 생성하고, 실제 구매 판단은 아래 예산 플랜을 기준으로 보세요." : "AI 이미지는 스타일 참고용입니다. 실제 실행 기준은 아래 예산 맞춤 구매 플랜입니다.");
 
     try {
@@ -275,6 +259,7 @@ export default function Home() {
       setShareStatus("공유 링크 복사");
       setGeneration(nextGeneration);
       setSelectedConceptId(fallbackConcepts[0]?.id ?? null);
+      setHasGeneratedDesign(true);
       setApiNotice("API 호출이 실패해 브라우저 내 실제 상품 카탈로그 조합으로 대체했습니다.");
       setApiNoticeTone("warning");
     } finally {
@@ -536,7 +521,7 @@ export default function Home() {
                 disabled={isGenerating || !isPromptReady}
                 className="w-full rounded-3xl bg-slate-950 px-5 py-4 text-base font-black text-white shadow-xl shadow-slate-950/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-slate-500 disabled:hover:translate-y-0"
               >
-                {isGenerating ? "AI가 예산 내 상품 조합을 다시 짜는 중..." : "같은 예산으로 시안 다시 뽑기"}
+                {isGenerating ? "Step 2+3 생성 중..." : hasGeneratedDesign ? "조건 반영해서 다시 만들기" : "Step 1 완료하고 시안 만들기"}
               </button>
               <div
                 className={`rounded-3xl px-4 py-3 text-center text-xs font-bold ${
@@ -549,6 +534,14 @@ export default function Home() {
               >
                 {apiNotice}
               </div>
+
+              {isGenerating ? (
+                <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
+                  <div className="mx-auto size-10 animate-spin rounded-full border-4 border-amber-200 border-t-slate-950" />
+                  <p className="mt-4 text-sm font-black text-slate-900">예산 안에서 실제 상품 조합을 계산하는 중입니다.</p>
+                  <p className="mt-2 text-xs font-bold leading-5 text-slate-500">완료되면 바로 아래에 Step 2 선택지와 Step 3 구매 플랜이 함께 나타납니다.</p>
+                </div>
+              ) : null}
 
               {currentJob ? (
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
@@ -614,7 +607,8 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="space-y-6">
+          {hasGeneratedDesign ? (
+            <div className="space-y-6">
             <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-amber-900/5 ring-1 ring-black/5 sm:p-6">
               <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                 <div>
@@ -914,7 +908,8 @@ export default function Home() {
                 ) : null}
               </div>
             </div>
-          </div>
+            </div>
+          ) : null}
         </section>
       </section>
     </main>
