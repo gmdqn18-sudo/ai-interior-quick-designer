@@ -828,31 +828,34 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="rounded-3xl bg-white/10 p-3">
-                  <div className="mb-2 text-xs font-black text-slate-300">현재 방</div>
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-[2rem] bg-white/10 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
+                    <span>수정 전 · 현재 방</span>
+                    <span>원본 사진</span>
+                  </div>
                   {previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={previewUrl} alt="원본 방 사진" className="h-40 w-full rounded-2xl bg-slate-900 object-contain" />
+                    <img src={previewUrl} alt="원본 방 사진" className="h-72 w-full rounded-[1.5rem] bg-slate-900 object-contain sm:h-96 lg:h-[30rem]" />
                   ) : (
-                    <div className="flex h-40 items-center justify-center rounded-2xl bg-slate-800 text-sm text-slate-400">업로드한 방 사진 영역</div>
+                    <div className="flex h-72 items-center justify-center rounded-[1.5rem] bg-slate-800 text-sm text-slate-400 sm:h-96 lg:h-[30rem]">업로드한 방 사진 영역</div>
                   )}
                 </div>
-                <div className="rounded-3xl bg-white/10 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
-                    <span>{generatedAfterImage ? "스타일 참고 이미지" : "시안 스타일 참고"} · {selectedConcept.title}</span>
+                <div className="rounded-[2rem] bg-white/10 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
+                    <span>수정 후 · {generatedAfterImage ? "스타일 참고 이미지" : "시안 스타일 참고"}</span>
                     <span>{selectedConcept.products.length}개 상품</span>
                   </div>
-                  <div className="relative overflow-hidden rounded-2xl bg-slate-900">
+                  <div className="relative overflow-hidden rounded-[1.5rem] bg-slate-900">
                     {generatedAfterImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-44 w-full object-contain" />
+                      <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-72 w-full object-contain sm:h-96 lg:h-[30rem]" />
                     ) : (
-                      <div className={`relative flex h-44 overflow-hidden rounded-2xl ${selectedConcept.palette} p-4 text-slate-950`}>
-                        <div className="absolute left-5 top-5 h-16 w-24 rounded-2xl bg-white/55 shadow-sm" />
-                        <div className="absolute right-5 top-8 h-24 w-16 rounded-2xl bg-white/45 shadow-sm" />
-                        <div className="absolute bottom-4 left-1/2 h-12 w-32 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
-                        <div className="relative z-10 mt-auto w-full rounded-2xl bg-white/85 p-3 text-xs font-black shadow-sm backdrop-blur">
+                      <div className={`relative flex h-72 overflow-hidden rounded-[1.5rem] ${selectedConcept.palette} p-5 text-slate-950 sm:h-96 lg:h-[30rem]`}>
+                        <div className="absolute left-8 top-8 h-24 w-36 rounded-3xl bg-white/55 shadow-sm" />
+                        <div className="absolute right-8 top-12 h-36 w-24 rounded-3xl bg-white/45 shadow-sm" />
+                        <div className="absolute bottom-10 left-1/2 h-20 w-56 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
+                        <div className="relative z-10 mt-auto w-full rounded-3xl bg-white/85 p-4 text-sm font-black shadow-sm backdrop-blur">
                           <div className="flex flex-wrap gap-1">
                             {selectedConcept.highlights.slice(0, 3).map((highlight) => (
                               <span key={highlight} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] text-white">
