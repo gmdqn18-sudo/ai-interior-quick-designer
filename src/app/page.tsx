@@ -184,8 +184,8 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [roomAnalysis, setRoomAnalysis] = useState<RoomAnalysis | null>(null);
-  const [analysisNotice, setAnalysisNotice] = useState("사진을 올리면 mock Vision이 방의 톤·채광·수납 제약을 먼저 분석합니다.");
-  const [apiNotice, setApiNotice] = useState("API Route가 실제 이케아 상품 상세 링크가 있는 카탈로그에서 예산 맞춤 조합을 반환합니다.");
+  const [analysisNotice, setAnalysisNotice] = useState("사진을 올리면 방의 톤·채광·수납 조건을 먼저 분석합니다.");
+  const [apiNotice, setApiNotice] = useState("검증된 상품 카탈로그에서 예산에 맞는 구매 조합을 추천합니다.");
   const [apiNoticeTone, setApiNoticeTone] = useState<"neutral" | "success" | "warning">("neutral");
   const [currentJob, setCurrentJob] = useState<DesignGenerationJob | null>(null);
   const [recentJobs, setRecentJobs] = useState<DesignGenerationJob[]>([]);
@@ -203,10 +203,12 @@ export default function Home() {
   const generatedAfterImage = generatedAfterImages[selectedConcept.id];
   const activeProduct = selectedConcept.products.find((product) => product.id === activeProductId) ?? null;
   const activeProductPlacement = activeProduct ? getProductOverlayPlacement(activeProduct) : null;
+  const canShowImageProductMapping = Boolean(generatedAfterImage);
   const mustBuyProducts = selectedConcept.products.slice(0, Math.min(3, selectedConcept.products.length));
   const niceToHaveProducts = selectedConcept.products.slice(mustBuyProducts.length);
   const planCompletionPercent = Math.min(100, Math.round((selectedConcept.usedBudget / Math.max(budget, 1)) * 100));
   const keptFurnitureText = keptFurniture.length > 0 ? keptFurniture.join(" · ") : "큰 가구는 최대한 유지";
+  const furnitureOptions = roomAnalysis?.detectedFurniture.length ? roomAnalysis.detectedFurniture : keepOptions;
 
   const refreshRecentJobs = async () => {
     try {
@@ -239,7 +241,7 @@ export default function Home() {
     setGeneratedAfterImages({});
     setAfterImageNotice("원본 방 사진을 AI 이미지 생성용으로 준비하는 중입니다...");
     setIsAnalyzing(true);
-    setAnalysisNotice("방 사진을 mock Vision API로 분석하는 중입니다...");
+    setAnalysisNotice("방 사진에서 톤·채광·수납 조건을 분석하는 중입니다...");
 
     try {
       const dataUrl = await readFileAsDataUrl(file);
@@ -263,8 +265,8 @@ export default function Home() {
       setAnalysisNotice(`분석 완료: ${data.analysis.summary}`);
       setApiNotice(
         hasGeneratedDesign
-          ? "방 사진 분석이 바뀌었습니다. Step 1 완료 버튼을 다시 누르면 새 분석을 반영해 Step 2+3을 다시 만듭니다."
-          : "방 사진 분석이 완료되었습니다. 예산과 취향을 확인한 뒤 Step 1 완료 버튼을 누르면 시안을 만듭니다.",
+          ? "방 사진 분석이 바뀌었습니다. 다시 시안 만들기를 누르면 새 분석을 반영합니다."
+          : "방 사진 분석이 완료되었습니다. 예산과 취향을 확인한 뒤 시안 만들기를 누르면 추천을 시작합니다.",
       );
       setApiNoticeTone("neutral");
     } catch {
@@ -314,7 +316,7 @@ export default function Home() {
       const data = (await response.json()) as DesignGenerationResponse;
       applyDesignResponse(data, nextGeneration);
       setApiNotice(
-        `생성 Job ${data.meta.jobId} 완료 · ${data.meta.roomAnalysisId ? "방 분석 결과를 반영해 " : ""}실제 상품 카탈로그에서 예산·프롬프트·상품 점수를 다시 계산했습니다.`,
+        `결과 ${data.meta.jobId} 생성 완료 · ${data.meta.roomAnalysisId ? "방 분석 결과를 반영해 " : ""}실제 상품 카탈로그에서 예산·프롬프트·상품 점수를 다시 계산했습니다.`,
       );
       setApiNoticeTone("success");
       void refreshRecentJobs();
@@ -409,52 +411,58 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f6f1e8] text-slate-950">
-      <section className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-5 py-8 sm:px-8 lg:px-10">
-        <nav className="flex items-center justify-between rounded-full border border-white/70 bg-white/70 px-5 py-3 shadow-sm backdrop-blur">
-          <div className="font-bold tracking-tight">RoomFit AI</div>
-          <a href="#demo" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-950/20">
+    <main className="min-h-screen overflow-hidden text-[#222222]">
+      <section className="mx-auto flex w-full max-w-7xl flex-col gap-14 px-5 py-6 sm:px-8 lg:px-10">
+        <nav className="sticky top-4 z-50 flex items-center justify-between rounded-full border border-black/5 bg-white/85 px-4 py-3 shadow-[var(--commercial-shadow)] backdrop-blur-xl sm:px-5">
+          <div className="flex items-center gap-2 font-black tracking-tight"><span className="flex size-8 items-center justify-center rounded-full bg-[#ff385c] text-white shadow-lg shadow-rose-500/25">R</span><span>RoomFit AI</span></div>
+          <div className="hidden items-center gap-6 text-sm font-bold text-slate-500 md:flex">
+            <a href="#demo" className="hover:text-[#222222]">데모</a>
+            <span>구매 가능한 상품</span>
+            <span>예산 고정</span>
+          </div>
+          <a href="#demo" className="rounded-full bg-[#ff385c] px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-rose-500/25 transition hover:-translate-y-0.5 hover:bg-[#e00b41]">
             무료 데모 시작
           </a>
         </nav>
 
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <div className="space-y-7">
-            <div className="inline-flex rounded-full border border-amber-200 bg-white/70 px-4 py-2 text-sm font-semibold text-amber-800">
+        <div className="relative grid gap-10 py-4 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-10">
+          <div className="space-y-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-black/5 bg-white/80 px-4 py-2 text-sm font-black text-[#ff385c] shadow-sm backdrop-blur">
               일반 AI와 다른 점: 예산 고정 · 시안 비교 · 쇼핑 리스트 자동화
             </div>
-            <div className="space-y-5">
-              <h1 className="text-4xl font-black leading-tight tracking-[-0.04em] sm:text-6xl">
-                내 방 사진 한 장으로,
-                <br />예산 안에서 계속 뽑아보는 인테리어 시안
+            <div className="space-y-6">
+              <h1 className="max-w-3xl text-4xl font-black leading-[1.04] tracking-[-0.05em] text-[#222222] sm:text-5xl lg:text-6xl">
+                <span className="block">내 방 사진 한 장으로,</span>
+                <span className="block">예산 안에서 비교하는</span>
+                <span className="block">AI 인테리어 시안</span>
               </h1>
-              <p className="max-w-2xl text-lg leading-8 text-slate-700">
-                Gemini가 예쁜 이미지를 만들어준다면, RoomFit AI는 같은 예산 안에서 여러 시안을 비교하고 마음에 든 결과를 바로 구매 가능한 쇼핑 리스트로 바꿔줍니다.
+              <p className="max-w-2xl text-lg font-medium leading-8 text-[#6a6a6a] sm:text-xl">
+                방 사진과 예산만 입력하면, 실제 구매 가능한 상품으로 구성된 인테리어 시안을 비교해드립니다.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                ["01", "프롬프트 고민 최소화"],
-                ["02", "예산 내 실판매 상품 조합"],
-                ["03", "시안 선택 후 구매 링크"],
+                ["01", "프롬프트 자동 보정"],
+                ["02", "예산 맞춤 상품 추천"],
+                ["03", "구매 링크 바로 확인"],
               ].map(([number, label]) => (
-                <div key={number} className="rounded-3xl bg-white/75 p-4 shadow-sm ring-1 ring-black/5">
-                  <div className="text-sm font-black text-amber-600">{number}</div>
+                <div key={number} className="rounded-[1.5rem] bg-white/85 p-4 shadow-[var(--commercial-shadow)] ring-1 ring-black/5 backdrop-blur transition hover:-translate-y-1">
+                  <div className="text-sm font-black text-[#ff385c]">{number}</div>
                   <div className="mt-2 font-bold">{label}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="rounded-[2rem] bg-slate-950 p-4 text-white shadow-2xl shadow-slate-900/20">
-            <div className={`h-72 rounded-[1.5rem] ${selectedConcept.palette} p-5 text-slate-950`}>
+          <div className="rounded-[2rem] border border-black/5 bg-white p-3 shadow-[var(--commercial-shadow)]">
+            <div className={`h-80 rounded-[1.5rem] ${selectedConcept.palette} p-5 text-slate-950`}>
               <div className="flex h-full flex-col justify-between rounded-3xl border border-white/70 bg-white/35 p-5 backdrop-blur-sm">
                 <div>
-                  <div className="mb-2 inline-flex rounded-full bg-white/80 px-3 py-1 text-xs font-bold">AI After Preview</div>
+                  <div className="mb-2 inline-flex rounded-full bg-white/80 px-3 py-1 text-xs font-bold">AI 시안 미리보기</div>
                   <h2 className="text-2xl font-black">{selectedConcept.title}</h2>
                   <p className="mt-2 max-w-sm text-sm leading-6 text-slate-700">{selectedConcept.strategy}</p>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-black">
                   <div className="rounded-2xl bg-white/80 p-3">예산 적합도<br />{selectedConcept.budgetFitScore}점</div>
                   <div className="rounded-2xl bg-white/80 p-3">구현 난이도<br />쉬움</div>
                   <div className="rounded-2xl bg-white/80 p-3">사용 금액<br />{formatWon(selectedConcept.usedBudget)}</div>
@@ -465,22 +473,22 @@ export default function Home() {
         </div>
 
         <section id="demo" className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-amber-900/5 ring-1 ring-black/5 sm:p-6">
+          <div className="rounded-[2rem] border border-black/5 bg-white p-5 shadow-[var(--commercial-shadow)] sm:p-7">
             <div className="mb-6">
-              <p className="text-sm font-bold text-amber-700">STEP 1</p>
-              <h2 className="mt-1 text-2xl font-black">방 사진, 예산, 취향만 입력하세요</h2>
+              <p className="text-sm font-black text-[#ff385c]">STEP 1</p>
+              <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">방 사진, 예산, 취향만 입력하세요</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">상품명을 상상하지 않고, 실제 상품 상세 링크가 검증된 카탈로그 안에서 예산에 맞는 조합을 바꿔가며 시안을 만듭니다.</p>
             </div>
 
-            <label className="group flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-amber-200 bg-amber-50/60 p-4 text-center transition hover:bg-amber-50">
+            <label className="group flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-[1.75rem] border-2 border-dashed border-rose-200 bg-rose-50/50 p-4 text-center transition hover:-translate-y-0.5 hover:bg-rose-50">
               {previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={previewUrl} alt="업로드한 방 사진 미리보기" className="h-48 w-full rounded-2xl bg-slate-900 object-contain" />
               ) : (
                 <div>
-                  <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm">＋</div>
+                  <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-white text-2xl text-[#ff385c] shadow-sm">＋</div>
                   <p className="font-bold">방 사진 업로드</p>
-                  <p className="mt-1 text-sm text-slate-500">MVP에서는 브라우저 미리보기만 제공합니다</p>
+                  <p className="mt-1 text-sm text-slate-500">사진을 올리면 공간 조건을 분석합니다</p>
                 </div>
               )}
               <input type="file" accept="image/*" onChange={handleImageChange} className="sr-only" />
@@ -490,13 +498,13 @@ export default function Home() {
               <div className="flex items-center justify-between gap-3">
                 <p className="font-black">AI 방 분석</p>
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-black shadow-sm">
-                  {isAnalyzing ? "분석 중" : roomAnalysis ? "mock Vision 완료" : "대기"}
+                  {isAnalyzing ? "분석 중" : roomAnalysis ? "분석 완료" : "대기"}
                 </span>
               </div>
               <p className="mt-2 leading-6">{analysisNotice}</p>
               {roomAnalysis ? (
                 <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs font-black">
                     <div className="rounded-2xl bg-white p-3">공간<br />{roomAnalysis.roomType}</div>
                     <div className="rounded-2xl bg-white p-3">채광<br />{roomAnalysis.lightLevel}</div>
                     <div className="rounded-2xl bg-white p-3">생활감<br />{roomAnalysis.clutterLevel}</div>
@@ -579,7 +587,7 @@ export default function Home() {
               <div>
                 <p className="text-sm font-bold">유지할 가구</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {keepOptions.map((item) => (
+                  {furnitureOptions.map((item) => (
                     <button
                       key={item}
                       type="button"
@@ -598,9 +606,9 @@ export default function Home() {
                 type="button"
                 onClick={generateAgain}
                 disabled={isGenerating || !isPromptReady}
-                className="w-full rounded-3xl bg-slate-950 px-5 py-4 text-base font-black text-white shadow-xl shadow-slate-950/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-slate-500 disabled:hover:translate-y-0"
+                className="w-full rounded-full bg-[#ff385c] px-5 py-4 text-base font-black text-white shadow-xl shadow-rose-500/25 transition hover:-translate-y-0.5 hover:bg-[#e00b41] disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none disabled:hover:translate-y-0"
               >
-                {isGenerating ? "Step 2+3 생성 중..." : hasGeneratedDesign ? "조건 반영해서 다시 만들기" : "Step 1 완료하고 시안 만들기"}
+                {isGenerating ? "시안 생성 중..." : hasGeneratedDesign ? "조건 반영해 다시 만들기" : "시안 만들기"}
               </button>
               <div
                 className={`rounded-3xl px-4 py-3 text-center text-xs font-bold ${
@@ -626,11 +634,11 @@ export default function Home() {
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-black text-slate-500">생성 Job</p>
+                      <p className="text-xs font-black text-slate-500">생성 결과</p>
                       <p className="mt-1 font-mono text-sm font-bold text-slate-900">{currentJob.id}</p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm">
-                      {currentJob.mode === "real-product-composition" ? "실제 상품 DB" : "Browser fallback"}
+                      {currentJob.mode === "real-product-composition" ? "구매 가능한 상품" : "브라우저 대체 생성"}
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-bold text-slate-600">
@@ -688,11 +696,11 @@ export default function Home() {
 
           {hasGeneratedDesign ? (
             <div className="space-y-6">
-            <div className="rounded-[2rem] bg-white p-5 shadow-xl shadow-amber-900/5 ring-1 ring-black/5 sm:p-6">
+            <div className="rounded-[2rem] border border-black/5 bg-white p-5 shadow-[var(--commercial-shadow)] sm:p-7">
               <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                 <div>
-                  <p className="text-sm font-bold text-amber-700">STEP 2</p>
-                  <h2 className="mt-1 text-2xl font-black">같은 예산의 시안을 비교하세요</h2>
+                  <p className="text-sm font-black text-[#ff385c]">STEP 2</p>
+                  <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">같은 예산의 시안을 비교하세요</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
                     {roomAnalysis
                       ? `사진 분석 반영: ${roomAnalysis.roomType} · 채광 ${roomAnalysis.lightLevel} · 생활감 ${roomAnalysis.clutterLevel} · ${roomAnalysis.recommendedPromptAdditions.slice(0, 2).join(" / ")}`
@@ -711,8 +719,8 @@ export default function Home() {
                       setSelectedConceptId(concept.id);
                       setActiveProductId(null);
                     }}
-                    className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
-                      selectedConcept.id === concept.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white hover:border-amber-300"
+                    className={`rounded-[1.75rem] border p-4 text-left shadow-sm transition hover:-translate-y-0.5 ${
+                      selectedConcept.id === concept.id ? "border-[#ff385c] bg-[#222222] text-white shadow-xl shadow-slate-950/15" : "border-slate-200 bg-white hover:border-rose-300 hover:shadow-lg"
                     }`}
                   >
                     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -777,11 +785,11 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] bg-slate-950 p-5 text-white shadow-xl shadow-slate-950/15 sm:p-6">
-              <p className="text-sm font-bold text-amber-300">STEP 3</p>
+            <div className="rounded-[2rem] border border-black/5 bg-[#222222] p-5 text-white shadow-[var(--commercial-shadow)] sm:p-7">
+              <p className="text-sm font-black text-rose-300">STEP 3</p>
               <div className="mt-1 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                 <div>
-                  <h2 className="text-2xl font-black">예산 안에서 이 방 완성하기</h2>
+                  <h2 className="text-2xl font-black tracking-[-0.03em] sm:text-3xl">예산 안에서 이 방 완성하기</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
                     AI 이미지는 스타일 참고용으로 쓰고, 실제 판단 기준은 아래 예산·우선순위·구매 리스트입니다.
                   </p>
@@ -789,7 +797,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={copyShoppingList}
-                  className="rounded-full bg-amber-300 px-4 py-2 text-sm font-black text-slate-950"
+                  className="rounded-full bg-[#ff385c] px-4 py-2 text-sm font-black text-white shadow-lg shadow-rose-500/20 transition hover:-translate-y-0.5"
                 >
                   {copyStatus}
                 </button>
@@ -799,7 +807,7 @@ export default function Home() {
                 <div className="rounded-2xl bg-white/10 p-3">설정 예산<br />{formatWon(budget)}</div>
                 <div className="rounded-2xl bg-white/10 p-3">사용 금액<br />{formatWon(selectedConcept.usedBudget)}</div>
                 <div className="rounded-2xl bg-white/10 p-3">남은 예산<br />{formatWon(remainingBudget)}</div>
-                <div className="rounded-2xl bg-amber-300 p-3 text-slate-950">예산 활용<br />{planCompletionPercent}%</div>
+                <div className="rounded-2xl bg-[#ff385c] p-3 text-white">예산 활용<br />{planCompletionPercent}%</div>
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -856,25 +864,12 @@ export default function Home() {
                         </div>
                       </div>
                     )}
-                    {activeProduct && activeProductPlacement ? (
-                      <div className="pointer-events-none absolute inset-0 z-20 bg-slate-950/10">
-                        <div
-                          className="absolute rounded-[1.25rem] border-4 border-amber-300 bg-amber-300/15 shadow-[0_0_0_999px_rgba(2,6,23,0.22)] ring-2 ring-white/90"
-                          style={activeProductPlacement.box}
-                        />
-                        <div
-                          className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-amber-300 px-3 py-2 text-[11px] font-black text-slate-950 shadow-xl"
-                          style={{ left: activeProductPlacement.arrow.left, top: activeProductPlacement.arrow.top }}
-                        >
-                          <span className="inline-block text-base" style={{ transform: `rotate(${activeProductPlacement.arrow.rotate})` }}>➜</span>
-                          <span className="max-w-36 truncate">{activeProduct.name}</span>
-                        </div>
-                        <div className="absolute bottom-3 left-3 rounded-2xl bg-white/95 px-3 py-2 text-[11px] font-black text-slate-950 shadow-lg">
-                          {activeProductPlacement.label} · {formatWon(activeProduct.price)}
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
+                  {activeProduct && activeProductPlacement ? (
+                    <div className="mt-2 rounded-2xl bg-amber-300/15 px-3 py-2 text-xs font-bold leading-5 text-amber-100">
+                      선택 상품 배치 후보: {activeProductPlacement.label} · {activeProduct.name} · {formatWon(activeProduct.price)}
+                    </div>
+                  ) : null}
                   <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-300">
                     {afterImageNotice}
                   </div>
@@ -882,7 +877,7 @@ export default function Home() {
                     type="button"
                     onClick={renderAfterImage}
                     disabled={isRenderingAfter || !roomImageDataUrl}
-                    className="mt-3 w-full rounded-2xl bg-amber-300 px-4 py-3 text-xs font-black text-slate-950 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:hover:translate-y-0"
+                    className="mt-3 w-full rounded-2xl bg-[#ff385c] px-4 py-3 text-xs font-black text-white transition hover:-translate-y-0.5 hover:bg-[#e00b41] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:hover:translate-y-0"
                   >
                     {isRenderingAfter ? "OpenAI 이미지 생성 중..." : generatedAfterImage ? "스타일 참고 이미지 다시 생성" : "스타일 참고 이미지 생성"}
                   </button>
@@ -892,36 +887,46 @@ export default function Home() {
               <div className="mt-4 rounded-3xl border border-amber-300/40 bg-amber-300/10 p-4">
                 <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                   <div>
-                    <h3 className="text-sm font-black text-amber-200">이 시안에 실제로 활용한 제품</h3>
+                    <h3 className="text-sm font-black text-amber-200">
+                      {canShowImageProductMapping ? "생성 이미지 구현용 구매 후보 제품" : "스타일 참고 이미지 생성 후 상품 매칭 확인"}
+                    </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
-                      아래 상품은 실제 이케아 상품 상세 페이지가 확인된 구매 후보입니다. 상품 카드에 마우스를 올리거나 탭하면 위 스타일 참고 이미지에서 배치 후보 영역을 표시합니다.
+                      {canShowImageProductMapping
+                        ? "아래 상품은 AI 이미지가 만든 분위기를 실제 구매로 구현하기 위한 검증 상품 후보입니다. 생성 이미지가 상품을 1:1로 사용했다는 뜻은 아니며, 카드를 선택하면 이미지 밖에 배치 후보만 텍스트로 표시합니다."
+                        : "아직 AI 스타일 참고 이미지가 생성되지 않았습니다. 이미지 생성 전에는 ‘실제로 활용한 제품’처럼 보이지 않도록 상품 카드를 숨기고, 아래 구매 플랜만 먼저 확인합니다."}
                     </p>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">총 {selectedConcept.products.length}개 · {formatWon(selectedConcept.usedBudget)}</span>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {selectedConcept.products.map((product, index) => (
-                    <a
-                      key={`used-${product.id}`}
-                      href={getProductPurchaseUrl(product)}
-                      target="_blank"
-                      rel="noreferrer"
-                      onMouseEnter={() => setActiveProductId(product.id)}
-                      onFocus={() => setActiveProductId(product.id)}
-                      onClick={() => setActiveProductId(product.id)}
-                      className={`group rounded-2xl bg-white p-3 text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>
-                        <div className="min-w-0">
-                          <div className="truncate text-xs font-black">{product.name}</div>
-                          <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} 바로 열기 · {formatWon(product.price)}</div>
-                          <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">{getProductPlacement(product)}</div>
+                {canShowImageProductMapping ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {selectedConcept.products.map((product, index) => (
+                      <a
+                        key={`used-${product.id}`}
+                        href={getProductPurchaseUrl(product)}
+                        target="_blank"
+                        rel="noreferrer"
+                        onMouseEnter={() => setActiveProductId(product.id)}
+                        onFocus={() => setActiveProductId(product.id)}
+                        onClick={() => setActiveProductId(product.id)}
+                        className={`group rounded-2xl bg-white p-3 text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-black">{product.name}</div>
+                            <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} 바로 열기 · {formatWon(product.price)}</div>
+                            <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">배치 후보: {getProductPlacement(product)}</div>
+                          </div>
                         </div>
-                      </div>
-                    </a>
-                  ))}
-                </div>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-2xl border border-dashed border-amber-300/50 bg-slate-950/20 p-4 text-center text-xs font-bold leading-5 text-slate-300">
+                    먼저 위의 “스타일 참고 이미지 생성” 버튼을 눌러 이미지 결과를 만든 뒤, 그 결과를 구현할 구매 후보 목록을 확인하세요.
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 space-y-4">

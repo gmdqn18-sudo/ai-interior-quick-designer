@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fffaf3;
+  --foreground: #222222;
+  --brand: #ff385c;
+  --brand-deep: #e00b41;
+  --surface: #ffffff;
+  --muted: #6a6a6a;
+  --warm-border: rgba(34, 34, 34, 0.08);
+  --commercial-shadow: rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 8px 24px, rgba(0, 0, 0, 0.08) 0 24px 60px;
 }
 
 @theme inline {
@@ -12,15 +18,55 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--background);
 }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% -10%, rgba(255, 56, 92, 0.14), transparent 34rem),
+    radial-gradient(circle at 95% 5%, rgba(245, 158, 11, 0.15), transparent 32rem),
+    linear-gradient(180deg, #fffaf3 0%, #ffffff 46%, #fff8ed 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "Noto Sans KR", "Apple SD Gothic Neo", Arial, Helvetica, sans-serif;
+  line-break: strict;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+::selection {
+  background: rgba(255, 56, 92, 0.18);
+  color: #222222;
+}
+
+button,
+a,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(255, 56, 92, 0.35);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
