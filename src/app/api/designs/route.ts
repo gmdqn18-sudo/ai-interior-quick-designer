@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { createMockDesignJob, listDesignJobs } from "@/lib/design-job-repository";
+import { createRealDesignJob, listDesignJobs } from "@/lib/design-job-repository";
 import type { DesignGenerationRequest } from "@/lib/design-api";
 
 const DEFAULT_BUDGET = 300000;
@@ -49,7 +49,7 @@ export async function GET() {
     jobs,
     meta: {
       count: jobs.length,
-      mode: "mock-product-composition",
+      mode: "real-product-composition",
     },
   });
 }
@@ -57,7 +57,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as DesignRequestBody;
   const normalizedBody = normalizeRequestBody(body);
-  const job = createMockDesignJob(normalizedBody);
+  const job = createRealDesignJob(normalizedBody);
 
   return NextResponse.json({
     job,

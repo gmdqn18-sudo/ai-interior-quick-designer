@@ -2,7 +2,7 @@ import type { DesignConcept } from "./interior-design";
 
 export type DesignGenerationStatus = "queued" | "completed" | "failed";
 
-export type DesignGenerationMode = "mock-product-composition" | "browser-fallback";
+export type DesignGenerationMode = "real-product-composition" | "browser-fallback";
 
 export type RoomAnalysis = {
   id: string;

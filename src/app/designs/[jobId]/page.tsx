@@ -66,7 +66,7 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-stretch">
           <div className="rounded-[2.5rem] bg-white p-6 shadow-xl shadow-amber-900/5 ring-1 ring-black/5 sm:p-8">
             <div className="inline-flex rounded-full bg-amber-100 px-4 py-2 text-xs font-black text-amber-800">
-              {job.mode === "mock-product-composition" ? "AI Interior Engine 결과" : "Browser fallback 결과"}
+              {job.mode === "real-product-composition" ? "실제 상품 카탈로그 기반 결과" : "Browser fallback 결과"}
             </div>
             <h1 className="mt-5 text-4xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">{summary.heroTitle}</h1>
             <p className="mt-4 max-w-2xl text-base leading-8 text-slate-700">{summary.heroStrategy}</p>

@@ -159,7 +159,27 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
     (tags.includes("living-room") && !brief.priorityTags.includes("living-room") ? 4 : 0) +
     (tags.includes("cozy-natural") && !brief.priorityTags.includes("cozy-natural") ? 4 : 0) +
     (tags.includes("workstation") && !brief.priorityTags.includes("workstation") ? 2 : 0);
-  return tagMatches * 5 + templateMatches * 3 + categoryMatch + premiumBudgetBoost + standardBudgetBoost - budgetPenalty - promptMismatchPenalty - index * 0.03;
+  const productText = `${product.name} ${product.reason}`;
+  const cozySpecificBoost =
+    brief.priorityTags.includes("cozy-natural") && hasAny(productText, ["숲", "동화", "내추럴", "참나무", "대나무", "호두", "식물"])
+      ? 14
+      : 0;
+  const livingRoomSpecificBoost =
+    brief.priorityTags.includes("living-room") && hasAny(productText, ["거실", "커피테이블", "보조테이블", "쿠션", "그림"])
+      ? 8
+      : 0;
+  return (
+    tagMatches * 5 +
+    templateMatches * 3 +
+    categoryMatch +
+    premiumBudgetBoost +
+    standardBudgetBoost +
+    cozySpecificBoost +
+    livingRoomSpecificBoost -
+    budgetPenalty -
+    promptMismatchPenalty -
+    index * 0.03
+  );
 }
 
 function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number) {

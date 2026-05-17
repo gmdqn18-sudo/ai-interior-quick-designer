@@ -13,7 +13,7 @@ const job: DesignGenerationJob = {
   id: "job_sharetest",
   createdAt: "2026-05-16T00:00:00.000Z",
   status: "completed",
-  mode: "mock-product-composition",
+  mode: "real-product-composition",
   budget: 150000,
   prompt: "화이트 미니멀 수납 중심",
   generation: 2,
@@ -39,15 +39,37 @@ const job: DesignGenerationJob = {
       id: "concept-a",
       title: "방 분석 맞춤 균형 시안",
       strategy: "예산 안에서 체감 변화가 큰 품목을 조합합니다.",
-      usedBudget: 137500,
+      usedBudget: 84800,
       budgetFitScore: 98,
       feasibilityScore: 96,
       roomStructureScore: 97,
       highlights: ["방 분석 결과 반영", "무타공·저시공 중심"],
       palette: "bg-gradient-to-br from-amber-100 via-stone-100 to-orange-200",
       products: [
-        { id: "p1", name: "무타공 데스크 페그보드", category: "수납", price: 35900, source: "쿠팡", url: "https://www.coupang.com/", reason: "기존 책상 유지" },
-        { id: "p2", name: "집게형 무드 조명", category: "조명", price: 12900, source: "네이버쇼핑", url: "https://shopping.naver.com/", reason: "채광 보완" },
+        {
+          id: "ikea-skadis-pegboard",
+          externalId: "30320806",
+          name: "SKÅDIS 스코디스 페그보드 화이트",
+          category: "수납",
+          price: 22900,
+          source: "이케아",
+          url: "https://www.ikea.com/kr/ko/p/skadis-pegboard-white-30320806/",
+          linkType: "product-detail",
+          verifiedAt: "2026-05-17",
+          reason: "기존 책상 유지",
+        },
+        {
+          id: "ikea-fado-table-lamp",
+          externalId: "30283899",
+          name: "FADO 파도 탁상스탠드 화이트",
+          category: "조명",
+          price: 24900,
+          source: "이케아",
+          url: "https://www.ikea.com/kr/ko/p/fado-table-lamp-white-30283899/",
+          linkType: "product-detail",
+          verifiedAt: "2026-05-17",
+          reason: "채광 보완",
+        },
       ],
     },
   ],
@@ -56,8 +78,8 @@ const job: DesignGenerationJob = {
     conceptCount: 1,
     historyCount: 0,
     averageBudgetFitScore: 98,
-    cheapestConceptUsedBudget: 137500,
-    highestConceptUsedBudget: 137500,
+    cheapestConceptUsedBudget: 84800,
+    highestConceptUsedBudget: 84800,
   },
 };
 
@@ -69,24 +91,24 @@ test("buildDesignShareSummary highlights budget, analysis, and selected product 
   const summary = buildDesignShareSummary(job);
 
   assert.equal(summary.heroTitle, "방 분석 맞춤 균형 시안");
-  assert.equal(summary.usedBudgetLabel, "137,500원");
+  assert.equal(summary.usedBudgetLabel, "84,800원");
   assert.equal(summary.roomAnalysisLabel, "원룸 · 채광 낮음 · 생활감 높음");
-  assert.equal(summary.executionChecklist[0], "무타공 데스크 페그보드 구매 후보 확인");
+  assert.equal(summary.executionChecklist[0], "SKÅDIS 스코디스 페그보드 화이트 구매 후보 확인");
   assert.deepEqual(summary.productCategories, ["수납", "조명"]);
 });
 
-test("buildShoppingListShareText creates copy-ready Korean share text", () => {
+test("buildShoppingListShareText creates copy-ready Korean share text with product-detail links", () => {
   const text = buildShoppingListShareText(job, "https://example.com/designs/job_sharetest");
 
   assert.match(text, /\[RoomFit AI\] 방 분석 맞춤 균형 시안/);
   assert.match(text, /공유 링크: https:\/\/example.com\/designs\/job_sharetest/);
-  assert.match(text, /1\. 무타공 데스크 페그보드 - 35,900원 - 쿠팡/);
-  assert.match(text, /구매 링크: https:\/\/www\.coupang\.com\/np\/search\?q=/);
+  assert.match(text, /1\. SKÅDIS 스코디스 페그보드 화이트 - 22,900원 - 이케아/);
+  assert.match(text, /구매 링크: https:\/\/www\.ikea\.com\/kr\/ko\/p\/skadis-pegboard-white-30320806\//);
 });
 
 test("getTopValueProducts ranks cheaper high-impact products first", () => {
   const products = getTopValueProducts(job, 1);
 
   assert.equal(products.length, 1);
-  assert.equal(products[0].name, "집게형 무드 조명");
+  assert.equal(products[0].name, "SKÅDIS 스코디스 페그보드 화이트");
 });

@@ -112,7 +112,7 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [roomAnalysis, setRoomAnalysis] = useState<RoomAnalysis | null>(null);
   const [analysisNotice, setAnalysisNotice] = useState("사진을 올리면 mock Vision이 방의 톤·채광·수납 제약을 먼저 분석합니다.");
-  const [apiNotice, setApiNotice] = useState("현재는 API Route가 더미 상품 조합을 반환하는 MVP 모드입니다.");
+  const [apiNotice, setApiNotice] = useState("API Route가 실제 이케아 상품 상세 링크가 있는 카탈로그에서 예산 맞춤 조합을 반환합니다.");
   const [apiNoticeTone, setApiNoticeTone] = useState<"neutral" | "success" | "warning">("neutral");
   const [currentJob, setCurrentJob] = useState<DesignGenerationJob | null>(null);
   const [recentJobs, setRecentJobs] = useState<DesignGenerationJob[]>([]);
@@ -221,7 +221,7 @@ export default function Home() {
       setShareStatus("공유 링크 복사");
       setGeneration(nextGeneration);
       setApiNotice(
-        `생성 Job ${data.meta.jobId} 완료 · ${data.meta.roomAnalysisId ? "방 분석 결과를 반영해 " : ""}AI Interior Engine이 예산·프롬프트·상품 점수를 다시 계산했습니다.`,
+        `생성 Job ${data.meta.jobId} 완료 · ${data.meta.roomAnalysisId ? "방 분석 결과를 반영해 " : ""}실제 상품 카탈로그에서 예산·프롬프트·상품 점수를 다시 계산했습니다.`,
       );
       setApiNoticeTone("success");
       void refreshRecentJobs();
@@ -243,7 +243,7 @@ export default function Home() {
       );
       setShareStatus("공유 링크 복사");
       setGeneration(nextGeneration);
-      setApiNotice("API 호출이 실패해 브라우저 내 더미 생성 로직으로 대체했습니다.");
+      setApiNotice("API 호출이 실패해 브라우저 내 실제 상품 카탈로그 조합으로 대체했습니다.");
       setApiNoticeTone("warning");
     } finally {
       setIsGenerating(false);
@@ -373,7 +373,7 @@ export default function Home() {
             <div className="mb-6">
               <p className="text-sm font-bold text-amber-700">STEP 1</p>
               <h2 className="mt-1 text-2xl font-black">방 사진, 예산, 취향만 입력하세요</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">상품은 먼저 고르지 않습니다. AI가 내부적으로 예산에 맞는 상품 조합을 바꿔가며 시안을 만듭니다.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">상품명을 상상하지 않고, 실제 상품 상세 링크가 검증된 카탈로그 안에서 예산에 맞는 조합을 바꿔가며 시안을 만듭니다.</p>
             </div>
 
             <label className="group flex min-h-52 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-amber-200 bg-amber-50/60 p-4 text-center transition hover:bg-amber-50">
@@ -526,7 +526,7 @@ export default function Home() {
                       <p className="mt-1 font-mono text-sm font-bold text-slate-900">{currentJob.id}</p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm">
-                      {currentJob.mode === "mock-product-composition" ? "AI Engine mock" : "Browser fallback"}
+                      {currentJob.mode === "real-product-composition" ? "실제 상품 DB" : "Browser fallback"}
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-bold text-slate-600">
@@ -713,7 +713,7 @@ export default function Home() {
                 </div>
                 <div className="rounded-3xl bg-white/10 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
-                    <span>{generatedAfterImage ? "스타일 참고 이미지" : "Mock 스타일 참고"} · {selectedConcept.title}</span>
+                    <span>{generatedAfterImage ? "스타일 참고 이미지" : "시안 스타일 참고"} · {selectedConcept.title}</span>
                     <span>{selectedConcept.products.length}개 상품</span>
                   </div>
                   {generatedAfterImage ? (
@@ -755,7 +755,7 @@ export default function Home() {
                   <div>
                     <h3 className="text-sm font-black text-amber-200">이 시안에 실제로 활용한 제품</h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
-                      아래 상품명이 이미지/플랜에 반영된 구매 후보입니다. 각 버튼은 해당 쇼핑몰 검색 결과로 바로 연결됩니다.
+                      아래 상품은 실제 이케아 상품 상세 페이지가 확인된 구매 후보입니다. 각 버튼은 검색 결과가 아니라 해당 상품 상세 페이지로 바로 연결됩니다.
                     </p>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">총 {selectedConcept.products.length}개 · {formatWon(selectedConcept.usedBudget)}</span>

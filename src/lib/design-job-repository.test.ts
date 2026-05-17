@@ -2,14 +2,14 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { DesignGenerationJob } from "./design-api";
-import { createMockDesignJob, getDesignJob } from "./design-job-repository";
+import { createRealDesignJob, getDesignJob } from "./design-job-repository";
 
 const globalStore = globalThis as typeof globalThis & {
   __roomfitDesignJobs?: Map<string, DesignGenerationJob>;
 };
 
 test("getDesignJob can restore a job after the in-memory cache is cleared", () => {
-  const job = createMockDesignJob({
+  const job = createRealDesignJob({
     budget: 120000,
     prompt: "수납 중심 원룸",
     generation: 1,

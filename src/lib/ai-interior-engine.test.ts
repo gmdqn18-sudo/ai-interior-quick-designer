@@ -93,7 +93,7 @@ test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room 
   const ghibliTopSix = ghibliProducts.slice(0, 6).join(" ");
   const overlap = ghibliProducts.filter((name) => minimalProducts.includes(name)).length;
 
-  assert.match(ghibliTopSix, /원목|라탄|플로어 쿠션|숲|포스터|북쉘프|코튼/);
+  assert.match(ghibliTopSix, /내추럴|호두나무|참나무|숲속의 동화|쿠션|커피테이블/);
   assert.ok(!ghibliTopSix.includes("데스크"), `Ghibli living-room top products should not be desk-heavy: ${ghibliTopSix}`);
   assert.ok(overlap <= 7, `expected prompt-specific product mix, got ${overlap} overlapping products`);
 });

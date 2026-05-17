@@ -51,13 +51,13 @@ function pruneJobs() {
   }
 }
 
-export function createMockDesignJob(input: DesignGenerationRequest): DesignGenerationJob {
+export function createRealDesignJob(input: DesignGenerationRequest): DesignGenerationJob {
   const plan = buildInteriorDesignPlan(input);
   const job: DesignGenerationJob = {
     id: makeJobId(),
     createdAt: new Date().toISOString(),
     status: "completed",
-    mode: "mock-product-composition",
+    mode: "real-product-composition",
     budget: input.budget,
     prompt: input.prompt,
     generation: input.generation,
