@@ -95,6 +95,11 @@ test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room 
 
   assert.match(ghibliTopSix, /내추럴|호두나무|참나무|숲속의 동화|쿠션|커피테이블/);
   assert.ok(!ghibliTopSix.includes("데스크"), `Ghibli living-room top products should not be desk-heavy: ${ghibliTopSix}`);
+  assert.ok(ghibliPlan.concepts.every((concept) => concept.products.every((product) => product.category !== "침구")), "living-room Ghibli plans should avoid bedroom bedding items");
+  assert.ok(
+    ghibliPlan.concepts.every((concept) => concept.products.filter((product) => product.category === "러그").length <= 1),
+    "living-room Ghibli plans should not pad the budget with duplicate rugs",
+  );
   assert.ok(overlap <= 7, `expected prompt-specific product mix, got ${overlap} overlapping products`);
 });
 

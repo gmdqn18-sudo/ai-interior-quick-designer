@@ -10,6 +10,7 @@ import {
   buildConcepts,
   budgetPresets,
   DesignConcept,
+  Product,
   getProductCompareUrl,
   getProductPlacement,
   getProductPurchaseUrl,
@@ -94,6 +95,78 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+type ProductOverlayPlacement = {
+  label: string;
+  box: { left: string; top: string; width: string; height: string };
+  arrow: { left: string; top: string; rotate: string };
+};
+
+function getProductOverlayPlacement(product: Product): ProductOverlayPlacement {
+  if (product.id.includes("lohals") || product.id.includes("stoense") || product.id.includes("morun") || product.id.includes("morum") || product.category === "러그") {
+    return {
+      label: "바닥 러그 영역",
+      box: { left: "30%", top: "56%", width: "45%", height: "27%" },
+      arrow: { left: "51%", top: "49%", rotate: "90deg" },
+    };
+  }
+
+  if (product.id.includes("stockholm") || product.category === "거실가구") {
+    return {
+      label: product.id.includes("holmerud") ? "좌측 보조테이블/휴식 코너" : "거실 중앙 테이블",
+      box: product.id.includes("holmerud") ? { left: "13%", top: "57%", width: "20%", height: "22%" } : { left: "43%", top: "51%", width: "24%", height: "22%" },
+      arrow: product.id.includes("holmerud") ? { left: "29%", top: "50%", rotate: "130deg" } : { left: "52%", top: "44%", rotate: "90deg" },
+    };
+  }
+
+  if (product.category === "조명") {
+    const isFloorLamp = product.id.includes("lauters") || product.id.includes("isjakt");
+    return {
+      label: isFloorLamp ? "코너 플로어 조명" : "무드 조명 포인트",
+      box: isFloorLamp ? { left: "72%", top: "33%", width: "14%", height: "34%" } : { left: "13%", top: "54%", width: "17%", height: "18%" },
+      arrow: isFloorLamp ? { left: "70%", top: "43%", rotate: "25deg" } : { left: "28%", top: "48%", rotate: "130deg" },
+    };
+  }
+
+  if (product.category === "커튼") {
+    return {
+      label: "창가 패브릭 톤 정리",
+      box: { left: "41%", top: "19%", width: "25%", height: "35%" },
+      arrow: { left: "47%", top: "14%", rotate: "90deg" },
+    };
+  }
+
+  if (product.category === "수납") {
+    return {
+      label: "우측 수납/정리 존",
+      box: { left: "72%", top: "48%", width: "22%", height: "30%" },
+      arrow: { left: "68%", top: "48%", rotate: "30deg" },
+    };
+  }
+
+  if (product.category === "소품") {
+    const isPlant = product.name.includes("식물") || product.name.includes("화분");
+    return {
+      label: isPlant ? "초록 식물 포인트" : "벽/선반 장식 포인트",
+      box: isPlant ? { left: "70%", top: "33%", width: "18%", height: "37%" } : { left: "79%", top: "37%", width: "15%", height: "16%" },
+      arrow: isPlant ? { left: "68%", top: "39%", rotate: "35deg" } : { left: "75%", top: "34%", rotate: "40deg" },
+    };
+  }
+
+  if (product.category === "패브릭" || product.category === "침구") {
+    return {
+      label: "좌식 쿠션/패브릭 영역",
+      box: { left: "23%", top: "54%", width: "22%", height: "24%" },
+      arrow: { left: "39%", top: "50%", rotate: "120deg" },
+    };
+  }
+
+  return {
+    label: "선택 상품 배치 후보",
+    box: { left: "42%", top: "45%", width: "22%", height: "22%" },
+    arrow: { left: "46%", top: "39%", rotate: "90deg" },
+  };
+}
+
 export default function Home() {
   const [budget, setBudget] = useState(300000);
   const [prompt, setPrompt] = useState("30만 원 이하로 따뜻한 우드톤 자취방처럼 꾸며줘. 책상은 그대로 두고 수납을 늘리고 싶어.");
@@ -118,6 +191,7 @@ export default function Home() {
   const [recentJobs, setRecentJobs] = useState<DesignGenerationJob[]>([]);
   const [shareStatus, setShareStatus] = useState("공유 링크 복사");
   const [hasGeneratedDesign, setHasGeneratedDesign] = useState(false);
+  const [activeProductId, setActiveProductId] = useState<string | null>(null);
 
   const selectedConcept =
     concepts.find((concept) => concept.id === selectedConceptId) ??
@@ -127,6 +201,8 @@ export default function Home() {
   const isPromptReady = prompt.trim().length >= 8;
   const isBudgetTight = selectedConcept.usedBudget > budget;
   const generatedAfterImage = generatedAfterImages[selectedConcept.id];
+  const activeProduct = selectedConcept.products.find((product) => product.id === activeProductId) ?? null;
+  const activeProductPlacement = activeProduct ? getProductOverlayPlacement(activeProduct) : null;
   const mustBuyProducts = selectedConcept.products.slice(0, Math.min(3, selectedConcept.products.length));
   const niceToHaveProducts = selectedConcept.products.slice(mustBuyProducts.length);
   const planCompletionPercent = Math.min(100, Math.round((selectedConcept.usedBudget / Math.max(budget, 1)) * 100));
@@ -150,6 +226,7 @@ export default function Home() {
     setShareStatus("공유 링크 복사");
     setGeneration(nextGeneration);
     setSelectedConceptId(data.concepts[0]?.id ?? null);
+    setActiveProductId(null);
     setHasGeneratedDesign(true);
   };
 
@@ -217,6 +294,7 @@ export default function Home() {
     const nextGeneration = generation + 1;
     setIsGenerating(true);
     setSelectedConceptId(null);
+    setActiveProductId(null);
     setCopyStatus("쇼핑 리스트 복사");
     setApiNotice(roomAnalysis ? "방 분석·예산·프롬프트를 반영해 Step 2+3을 생성하는 중입니다..." : "예산과 프롬프트를 반영해 Step 2+3을 생성하는 중입니다...");
     setApiNoticeTone("neutral");
@@ -259,6 +337,7 @@ export default function Home() {
       setShareStatus("공유 링크 복사");
       setGeneration(nextGeneration);
       setSelectedConceptId(fallbackConcepts[0]?.id ?? null);
+      setActiveProductId(null);
       setHasGeneratedDesign(true);
       setApiNotice("API 호출이 실패해 브라우저 내 실제 상품 카탈로그 조합으로 대체했습니다.");
       setApiNoticeTone("warning");
@@ -628,7 +707,10 @@ export default function Home() {
                   <button
                     key={concept.id}
                     type="button"
-                    onClick={() => setSelectedConceptId(concept.id)}
+                    onClick={() => {
+                      setSelectedConceptId(concept.id);
+                      setActiveProductId(null);
+                    }}
                     className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
                       selectedConcept.id === concept.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white hover:border-amber-300"
                     }`}
@@ -660,7 +742,10 @@ export default function Home() {
                   <button
                     key={`table-${concept.id}`}
                     type="button"
-                    onClick={() => setSelectedConceptId(concept.id)}
+                    onClick={() => {
+                      setSelectedConceptId(concept.id);
+                      setActiveProductId(null);
+                    }}
                     className="grid w-full grid-cols-4 items-center px-4 py-3 text-left text-xs font-semibold hover:bg-amber-50"
                   >
                     <span className="truncate pr-2">{concept.title}</span>
@@ -678,7 +763,10 @@ export default function Home() {
                     <button
                       key={`history-${concept.id}`}
                       type="button"
-                      onClick={() => setSelectedConceptId(concept.id)}
+                      onClick={() => {
+                      setSelectedConceptId(concept.id);
+                      setActiveProductId(null);
+                    }}
                       className="min-w-44 rounded-2xl bg-white p-3 text-left text-xs shadow-sm ring-1 ring-black/5"
                     >
                       <div className="font-black">{concept.title.replace(" 시안", "")}</div>
@@ -747,26 +835,46 @@ export default function Home() {
                     <span>{generatedAfterImage ? "스타일 참고 이미지" : "시안 스타일 참고"} · {selectedConcept.title}</span>
                     <span>{selectedConcept.products.length}개 상품</span>
                   </div>
-                  {generatedAfterImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-44 w-full rounded-2xl bg-slate-900 object-contain" />
-                  ) : (
-                    <div className={`relative flex h-44 overflow-hidden rounded-2xl ${selectedConcept.palette} p-4 text-slate-950`}>
-                      <div className="absolute left-5 top-5 h-16 w-24 rounded-2xl bg-white/55 shadow-sm" />
-                      <div className="absolute right-5 top-8 h-24 w-16 rounded-2xl bg-white/45 shadow-sm" />
-                      <div className="absolute bottom-4 left-1/2 h-12 w-32 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
-                      <div className="relative z-10 mt-auto w-full rounded-2xl bg-white/85 p-3 text-xs font-black shadow-sm backdrop-blur">
-                        <div className="flex flex-wrap gap-1">
-                          {selectedConcept.highlights.slice(0, 3).map((highlight) => (
-                            <span key={highlight} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] text-white">
-                              {highlight}
-                            </span>
-                          ))}
+                  <div className="relative overflow-hidden rounded-2xl bg-slate-900">
+                    {generatedAfterImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={generatedAfterImage} alt={`${selectedConcept.title} 실제 AI After 이미지`} className="h-44 w-full object-contain" />
+                    ) : (
+                      <div className={`relative flex h-44 overflow-hidden rounded-2xl ${selectedConcept.palette} p-4 text-slate-950`}>
+                        <div className="absolute left-5 top-5 h-16 w-24 rounded-2xl bg-white/55 shadow-sm" />
+                        <div className="absolute right-5 top-8 h-24 w-16 rounded-2xl bg-white/45 shadow-sm" />
+                        <div className="absolute bottom-4 left-1/2 h-12 w-32 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
+                        <div className="relative z-10 mt-auto w-full rounded-2xl bg-white/85 p-3 text-xs font-black shadow-sm backdrop-blur">
+                          <div className="flex flex-wrap gap-1">
+                            {selectedConcept.highlights.slice(0, 3).map((highlight) => (
+                              <span key={highlight} className="rounded-full bg-slate-950 px-2 py-1 text-[10px] text-white">
+                                {highlight}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-slate-700">대표 구성: {selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
                         </div>
-                        <p className="mt-2 text-slate-700">대표 구성: {selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {activeProduct && activeProductPlacement ? (
+                      <div className="pointer-events-none absolute inset-0 z-20 bg-slate-950/10">
+                        <div
+                          className="absolute rounded-[1.25rem] border-4 border-amber-300 bg-amber-300/15 shadow-[0_0_0_999px_rgba(2,6,23,0.22)] ring-2 ring-white/90"
+                          style={activeProductPlacement.box}
+                        />
+                        <div
+                          className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-amber-300 px-3 py-2 text-[11px] font-black text-slate-950 shadow-xl"
+                          style={{ left: activeProductPlacement.arrow.left, top: activeProductPlacement.arrow.top }}
+                        >
+                          <span className="inline-block text-base" style={{ transform: `rotate(${activeProductPlacement.arrow.rotate})` }}>➜</span>
+                          <span className="max-w-36 truncate">{activeProduct.name}</span>
+                        </div>
+                        <div className="absolute bottom-3 left-3 rounded-2xl bg-white/95 px-3 py-2 text-[11px] font-black text-slate-950 shadow-lg">
+                          {activeProductPlacement.label} · {formatWon(activeProduct.price)}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-300">
                     {afterImageNotice}
                   </div>
@@ -786,7 +894,7 @@ export default function Home() {
                   <div>
                     <h3 className="text-sm font-black text-amber-200">이 시안에 실제로 활용한 제품</h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
-                      아래 상품은 실제 이케아 상품 상세 페이지가 확인된 구매 후보입니다. 각 버튼은 검색 결과가 아니라 해당 상품 상세 페이지로 바로 연결됩니다.
+                      아래 상품은 실제 이케아 상품 상세 페이지가 확인된 구매 후보입니다. 상품 카드에 마우스를 올리거나 탭하면 위 스타일 참고 이미지에서 배치 후보 영역을 표시합니다.
                     </p>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">총 {selectedConcept.products.length}개 · {formatWon(selectedConcept.usedBudget)}</span>
@@ -798,7 +906,10 @@ export default function Home() {
                       href={getProductPurchaseUrl(product)}
                       target="_blank"
                       rel="noreferrer"
-                      className="group rounded-2xl bg-white p-3 text-slate-950 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                      onMouseEnter={() => setActiveProductId(product.id)}
+                      onFocus={() => setActiveProductId(product.id)}
+                      onClick={() => setActiveProductId(product.id)}
+                      className={`group rounded-2xl bg-white p-3 text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
                     >
                       <div className="flex items-start gap-2">
                         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>

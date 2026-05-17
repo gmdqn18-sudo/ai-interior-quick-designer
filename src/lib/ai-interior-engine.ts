@@ -182,6 +182,21 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
   );
 }
 
+function canAddProduct(product: Product, picked: Product[], brief: InteriorPromptBrief) {
+  if (product.category === "침구" && brief.priorityTags.includes("living-room") && !brief.priorityTags.includes("hotel")) return false;
+
+  const sameCategoryCount = picked.filter((item) => item.category === product.category).length;
+  const isLivingRoomPlan = brief.priorityTags.includes("living-room");
+  const maxByCategory = isLivingRoomPlan
+    ? product.category === "러그" || product.category === "침구"
+      ? 1
+      : product.category === "조명" || product.category === "소품"
+        ? 3
+        : 2
+    : 99;
+  return sameCategoryCount < maxByCategory;
+}
+
 function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number) {
   const budgetCap = Math.max(10000, Math.floor(budget * 0.96));
   const targetSpend = brief.budgetTier === "premium" ? Math.floor(budget * 0.72) : brief.budgetTier === "standard" ? Math.floor(budget * 0.65) : 0;
@@ -196,6 +211,7 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
 
   for (const { product } of sorted) {
     if (brief.budgetTier === "starter" && picked.some((item) => item.category === product.category) && picked.length >= 3) continue;
+    if (!canAddProduct(product, picked, brief)) continue;
     if (total + product.price > budgetCap) continue;
     picked.push(product);
     total += product.price;
@@ -213,6 +229,7 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
 
     for (const product of fillers) {
       if (picked.length >= maxProducts) break;
+      if (!canAddProduct(product, picked, brief)) continue;
       if (total + product.price > budgetCap) continue;
       picked.push(product);
       total += product.price;
@@ -223,6 +240,7 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
   if (picked.length < 3) {
     for (const product of productPool.slice().sort((a, b) => a.price - b.price)) {
       if (picked.some((item) => item.id === product.id)) continue;
+      if (!canAddProduct(product, picked, brief)) continue;
       if (total + product.price > budgetCap) continue;
       picked.push(product);
       total += product.price;
