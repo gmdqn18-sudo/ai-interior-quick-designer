@@ -265,6 +265,94 @@ test("buildInteriorDesignPlan covers explicitly requested categories when live c
   assert.match(selectedText, /조명|스탠드|무드등/);
 });
 
+test("buildInteriorDesignPlan keeps requested cafe storage from being filled by chair-like results", () => {
+  const liveProduct = (category: string, name: string, price: number, query: string): Product => ({
+    id: `cafe-${category}-${name}`.replace(/\s+/g, "-"),
+    externalId: `external-cafe-${category}-${name}`,
+    name,
+    category,
+    price,
+    source: "네이버쇼핑",
+    url: `https://smartstore.naver.com/test/products/${encodeURIComponent(name)}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: `${category} live candidate`,
+    provider: "naver-shopping",
+    searchQuery: query,
+    availabilityNote: "가격/재고 변동 가능",
+    mallName: "테스트몰",
+  });
+  const productCandidates: Product[] = [
+    liveProduct("수납", "블랙 바 스툴 2종 세트 메탈 모던 의자", 120000, "카페 카운터 수납 선반 블랙 모던"),
+    liveProduct("수납", "블랙 카페 카운터 수납 선반 장식장", 140000, "카페 카운터 수납 선반 블랙 모던"),
+    liveProduct("책상/테이블", "블랙 바테이블 카페 테이블", 90000, "카페 바테이블 카페 테이블 블랙 모던"),
+    liveProduct("의자", "블랙 바스툴 카페 의자", 70000, "카페 바스툴 카페 의자 블랙 모던"),
+    liveProduct("조명", "블랙 펜던트 조명", 60000, "카페 펜던트 조명 블랙 모던"),
+  ];
+
+  const plan = buildInteriorDesignPlan(
+    {
+      budget: 800000,
+      prompt: "작은 카페를 창업하려고 합니다. 블랙 모던 분위기로 바 테이블, 조명, 의자, 수납까지 추천해주세요.",
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    },
+    { productCandidates },
+  );
+  const firstConcept = plan.concepts[0].products;
+  const storageProducts = firstConcept.filter((product) => product.category === "수납");
+
+  assert.ok(storageProducts.some((product) => /수납|선반|장식장/.test(product.name)), firstConcept.map((product) => product.name).join(" / "));
+  assert.ok(storageProducts.every((product) => !/스툴|의자|체어|바스툴/.test(product.name)), firstConcept.map((product) => product.name).join(" / "));
+});
+
+test("buildInteriorDesignPlan gives each primary concept the requested residential rug storage lighting and bedding coverage", () => {
+  const liveProduct = (category: string, name: string, price: number, query: string): Product => ({
+    id: `room-${category}-${name}`.replace(/\s+/g, "-"),
+    externalId: `external-room-${category}-${name}`,
+    name,
+    category,
+    price,
+    source: "네이버쇼핑",
+    url: `https://smartstore.naver.com/test/products/${encodeURIComponent(name)}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: `${category} live candidate`,
+    provider: "naver-shopping",
+    searchQuery: query,
+    availabilityNote: "가격/재고 변동 가능",
+    mallName: "테스트몰",
+  });
+  const productCandidates: Product[] = [
+    liveProduct("침구", "원룸 베이지 침구 이불 커버 세트", 70000, "원룸 침구 이불 커버 우드 베이지"),
+    liveProduct("조명", "원룸 우드 무드등 조명", 30000, "원룸 무드등 조명 우드 베이지"),
+    liveProduct("수납", "원룸 라탄 수납 선반 정리대", 80000, "원룸 수납 선반 우드 베이지"),
+    liveProduct("러그", "원룸 베이지 러그 카페트", 60000, "원룸 러그 카페트 우드 베이지"),
+    liveProduct("침구", "원룸 추가 차렵이불 베개 세트", 65000, "원룸 침구 이불 커버 우드 베이지"),
+    liveProduct("침구", "원룸 침대패드 매트리스 커버", 50000, "원룸 침구 이불 커버 우드 베이지"),
+  ];
+
+  const plan = buildInteriorDesignPlan(
+    {
+      budget: 800000,
+      prompt: "월세 원룸을 깔끔하고 따뜻한 우드톤으로 꾸미고 싶습니다. 침구, 조명, 러그, 수납을 예산 안에서 추천해주세요.",
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    },
+    { productCandidates },
+  );
+
+  for (const concept of plan.concepts) {
+    const categories = concept.products.map((product) => product.category);
+    assert.ok(categories.includes("침구"), `${concept.title} should include bedding: ${categories.join(",")}`);
+    assert.ok(categories.includes("조명"), `${concept.title} should include lighting: ${categories.join(",")}`);
+    assert.ok(categories.includes("러그"), `${concept.title} should include rug: ${categories.join(",")}`);
+    assert.ok(categories.includes("수납"), `${concept.title} should include storage: ${categories.join(",")}`);
+  }
+});
+
 test("buildInteriorDesignPlan can use injected live product candidates instead of the static productPool", () => {
   const liveProducts: Product[] = Array.from({ length: 5 }, (_, index) => ({
     id: `naver-live-light-${index + 1}`,

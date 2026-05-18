@@ -2,7 +2,13 @@ import { buildPromptBrief, type InteriorPromptBrief, type InteriorPriorityTag, t
 import type { DesignGenerationRequest } from "./design-api";
 import { productPool, type Product } from "./interior-design";
 import { searchNaverShopping, type NaverShoppingClientOptions } from "./naver-shopping";
-import { CATEGORY_POSITIVE_KEYWORDS, countCategoryKeywordMatches, countSoftProductPenalties, hasStrongProductExclude } from "./product-quality-rules";
+import {
+  CATEGORY_POSITIVE_KEYWORDS,
+  countCategoryKeywordMatches,
+  countSoftProductPenalties,
+  hasCategoryKeywordMismatch,
+  hasStrongProductExclude,
+} from "./product-quality-rules";
 
 export type ProductSearchProvider = "naver-shopping" | "static-catalog" | "mixed";
 export type ProductSearchStatus = "live" | "partial-fallback" | "fallback";
@@ -193,7 +199,7 @@ function dedupeProducts(products: Product[]) {
   const deduped: Product[] = [];
 
   for (const product of products) {
-    if (hasStrongProductExclude(product)) continue;
+    if (hasStrongProductExclude(product) || hasCategoryKeywordMismatch(product)) continue;
     const normalizedTitle = normalizeProductText(product.name);
     const normalizedUrl = normalizeProductUrl(product.url);
     const titleMallKey = `${product.mallName ?? product.source}:${normalizedTitle}`;
@@ -205,6 +211,19 @@ function dedupeProducts(products: Product[]) {
   }
 
   return deduped.sort((a, b) => productQualityScore(b) - productQualityScore(a) || a.price - b.price);
+}
+
+function missingRequestedCategories(products: Product[], queries: ProductSearchQuery[]) {
+  const requested = unique(queries.map((query) => query.targetCategory).filter((category) => Boolean(CATEGORY_POSITIVE_KEYWORDS[category])));
+  return requested.filter((category) => !products.some((product) => product.category === category));
+}
+
+function supplementMissingRequestedCategories(products: Product[], queries: ProductSearchQuery[]) {
+  const missing = missingRequestedCategories(products, queries);
+  if (missing.length === 0) return { products, missing };
+  const supplements = productPool.filter((product) => missing.includes(product.category));
+  if (supplements.length === 0) return { products, missing };
+  return { products: dedupeProducts([...products, ...supplements]), missing };
 }
 
 function fallbackProducts(reason: string, queries: ProductSearchQuery[]): ProductSearchResult {
@@ -260,16 +279,21 @@ export async function resolveProductCandidatesForDesign(
     return fallbackProducts("네이버 쇼핑 검색 결과에서 유효한 상품 후보를 찾지 못했습니다.", queries);
   }
 
-  if (liveProducts.length < minLiveProducts) {
+  const supplementedLive = supplementMissingRequestedCategories(liveProducts, queries);
+
+  if (liveProducts.length < minLiveProducts || supplementedLive.products.length > liveProducts.length) {
+    const lowCountFallback = liveProducts.length < minLiveProducts;
+    const finalProducts = lowCountFallback ? dedupeProducts([...supplementedLive.products, ...productPool]) : supplementedLive.products;
+    const missingReason = supplementedLive.products.length > liveProducts.length ? `요청 카테고리(${supplementedLive.missing.join(", ")}) 후보가 부족해 기본 카탈로그로 보완했습니다.` : null;
     return {
-      products: dedupeProducts([...liveProducts, ...productPool]),
+      products: finalProducts,
       meta: {
         provider: "mixed",
         status: "partial-fallback",
         queries,
         fetchedAt: new Date().toISOString(),
         apiCallCount,
-        fallbackReason: `실시간 상품 후보가 ${liveProducts.length}개라 기본 카탈로그로 일부 보완했습니다.`,
+        fallbackReason: missingReason ?? `실시간 상품 후보가 ${liveProducts.length}개라 기본 카탈로그로 일부 보완했습니다.`,
         notice: `실시간 상품 후보가 부족해 기본 카탈로그를 일부 함께 사용했습니다. ${PRICE_NOTICE}`,
       },
     };

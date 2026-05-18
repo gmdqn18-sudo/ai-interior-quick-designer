@@ -59,6 +59,36 @@ test("buildProductSearchQueries uses residential shopping labels instead of broa
   assert.ok(queries.every((query) => !query.query.includes("주거")));
 });
 
+test("resolveProductCandidatesForDesign supplements live results when requested residential slots are missing", async () => {
+  const items = Array.from({ length: 12 }, (_, index) => ({
+    title: `원룸 베이지 침구 이불 세트 ${index + 1}`,
+    link: `https://smartstore.naver.com/bedding/products/${index + 1}`,
+    lprice: String(40000 + index * 1000),
+    mallName: "침구몰",
+    productId: `bedding-${index + 1}`,
+    category1: "가구/인테리어",
+  }));
+  const fetchImpl: typeof fetch = async () =>
+    new Response(JSON.stringify({ total: items.length, start: 1, display: items.length, items }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  const result = await resolveProductCandidatesForDesign(
+    {
+      ...request,
+      prompt: "월세 원룸을 깔끔하고 따뜻한 우드톤으로 꾸미고 싶습니다. 침구, 조명, 러그, 수납을 예산 안에서 추천해주세요.",
+    },
+    undefined,
+    { clientId: "client-id", clientSecret: "client-secret", fetchImpl, display: items.length, minLiveProducts: 10 },
+  );
+
+  assert.equal(result.meta.status, "partial-fallback");
+  assert.ok(result.products.some((product) => product.category === "러그"), "missing requested rug slot should be supplemented from fallback catalog");
+  assert.ok(result.products.some((product) => product.category === "수납"), "missing requested storage slot should be supplemented from fallback catalog");
+  assert.ok(result.products.some((product) => product.category === "조명"), "missing requested lighting slot should be supplemented from fallback catalog");
+});
+
 test("resolveProductCandidatesForDesign filters negative shopping results and dedupes normalized product identities", async () => {
   const items = [
     {

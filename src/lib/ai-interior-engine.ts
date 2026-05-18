@@ -4,6 +4,7 @@ import {
   CATEGORY_POSITIVE_KEYWORDS,
   countCategoryKeywordMatches,
   countSoftProductPenalties,
+  hasCategoryKeywordMismatch,
   hasStrongProductExclude,
   productQualityText,
 } from "./product-quality-rules";
@@ -273,7 +274,7 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
 }
 
 function canAddProduct(product: Product, picked: Product[], brief: InteriorPromptBrief) {
-  if (hasStrongProductExclude(product)) return false;
+  if (hasStrongProductExclude(product) || hasCategoryKeywordMismatch(product)) return false;
   if (product.category === "침구" && brief.priorityTags.includes("living-room") && !brief.priorityTags.includes("hotel")) return false;
   if (picked.some((item) => sameProductIdentity(item, product))) return false;
 

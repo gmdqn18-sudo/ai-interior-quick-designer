@@ -35,6 +35,18 @@ export function productQualityText(product: Product) {
     .join(" ");
 }
 
+function productIntrinsicText(product: Product) {
+  return [product.name, product.rawCategory?.category1, product.rawCategory?.category2, product.rawCategory?.category3, product.rawCategory?.category4].filter(Boolean).join(" ");
+}
+
+export function hasCategoryKeywordMismatch(product: Product) {
+  const text = productIntrinsicText(product);
+  if (product.category === "수납" && hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.의자)) return true;
+  if (product.category === "의자" && hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.수납) && !hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.의자)) return true;
+  if (product.category === "러그" && !hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.러그)) return true;
+  return false;
+}
+
 export function hasStrongProductExclude(product: Product) {
   return hasAnyKeyword(productQualityText(product), STRONG_PRODUCT_EXCLUDE_KEYWORDS);
 }
