@@ -33,7 +33,7 @@ function formatProductPrice(product: Product) {
 
 function buildShoppingListText(concept: DesignConcept, budget: number) {
   const productLines = concept.products
-    .map((product, index) => `${index + 1}. ${product.name} / ${formatProductPrice(product)} / ${product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
+    .map((product, index) => `${index + 1}. ${product.name} / ${formatProductPrice(product)} / ${product.mallName ?? product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
     .join("\n");
 
   return `[RoomFit AI] ${concept.title}\n설정 예산: ${formatWon(budget)}\n사용 금액: ${formatWon(
@@ -54,12 +54,23 @@ function buildClientDesignResponse({
   keptFurniture: string[];
   roomAnalysis?: RoomAnalysis | null;
 }): DesignGenerationResponse {
+  const createdAt = new Date().toISOString();
+  const productSearchMeta = {
+    provider: "static-catalog" as const,
+    status: "fallback" as const,
+    queries: [],
+    fetchedAt: createdAt,
+    apiCallCount: 0,
+    fallbackReason: "서버 실시간 검색 실패로 브라우저 기본 카탈로그 추천을 사용했습니다.",
+    notice: "실시간 검색 실패로 기본 카탈로그 추천을 사용했습니다. 가격/재고는 외부 쇼핑몰 사정에 따라 변동될 수 있습니다.",
+  };
   const job = composeDesignGenerationJob(
     { budget, prompt, generation, keptFurniture, roomAnalysis: roomAnalysis ?? null },
     {
       id: `fallback_${Date.now().toString(36)}`,
-      createdAt: new Date().toISOString(),
+      createdAt,
       mode: "browser-fallback",
+      productSearchMeta,
     },
   );
 
@@ -77,6 +88,7 @@ function buildClientDesignResponse({
       mode: job.mode,
       status: job.status,
       roomAnalysisId: roomAnalysis?.id,
+      productSearchMeta,
     },
   };
 }
@@ -333,7 +345,7 @@ export default function Home() {
     setSelectedConceptId(null);
     setActiveProductId(null);
     setCopyStatus("쇼핑 리스트 복사");
-    setApiNotice(roomAnalysis ? "방 분석·예산·프롬프트를 반영해 Step 2+3을 생성하는 중입니다..." : "예산과 프롬프트를 반영해 Step 2+3을 생성하는 중입니다...");
+    setApiNotice(roomAnalysis ? "방 분석·예산·프롬프트를 반영해 실시간 상품 검색부터 시작합니다..." : "예산과 프롬프트를 반영해 실시간 상품 검색부터 시작합니다...");
     setApiNoticeTone("neutral");
     setAfterImageNotice(roomImageDataUrl ? "새 시안이 생성되었습니다. AI 이미지는 참고용으로 생성하고, 실제 구매 판단은 아래 예산 플랜을 기준으로 보세요." : "AI 이미지는 스타일 참고용입니다. 실제 실행 기준은 아래 예산 맞춤 구매 플랜입니다.");
 
@@ -349,16 +361,17 @@ export default function Home() {
       }
 
       const data = (await response.json()) as DesignGenerationResponse;
+      const searchNotice = data.meta.productSearchMeta?.notice ?? "네이버 쇼핑 실시간 검색 결과를 기반으로 상품 조합을 계산했습니다. 가격/재고는 변동될 수 있습니다.";
       applyDesignResponse(data, nextGeneration);
       setApiNotice(
-        `결과 ${data.meta.jobId} 생성 완료 · ${data.meta.roomAnalysisId ? "방 분석 결과를 반영해 " : ""}실제 상품 카탈로그에서 예산·프롬프트·상품 점수를 다시 계산했습니다.`,
+        `결과 ${data.meta.jobId} 생성 완료 · ${searchNotice}`,
       );
       setApiNoticeTone("success");
       void refreshRecentJobs();
     } catch {
       const fallbackData = buildClientDesignResponse({ budget, prompt, generation: nextGeneration, keptFurniture, roomAnalysis });
       applyDesignResponse(fallbackData, nextGeneration);
-      setApiNotice("API 호출이 실패해도 같은 추천 엔진으로 브라우저에서 재계산했습니다. 서버/클라이언트 결과 구조는 동일합니다.");
+      setApiNotice("실시간 검색 실패로 기본 카탈로그 추천을 사용했습니다. 네이버 API 키는 클라이언트로 노출하지 않고, 브라우저에서는 fallback fixture로만 재계산합니다.");
       setApiNoticeTone("warning");
     } finally {
       setIsGenerating(false);
@@ -643,8 +656,8 @@ export default function Home() {
               {isGenerating ? (
                 <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center">
                   <div className="mx-auto size-10 animate-spin rounded-full border-4 border-amber-200 border-t-slate-950" />
-                  <p className="mt-4 text-sm font-black text-slate-900">예산 안에서 실제 상품 조합을 계산하는 중입니다.</p>
-                  <p className="mt-2 text-xs font-bold leading-5 text-slate-500">완료되면 바로 아래에 Step 2 선택지와 Step 3 구매 플랜이 함께 나타납니다.</p>
+                  <p className="mt-4 text-sm font-black text-slate-900">실시간 상품 검색 후 예산 안의 구매 조합을 계산하는 중입니다.</p>
+                  <p className="mt-2 text-xs font-bold leading-5 text-slate-500">완료되면 바로 아래에 Step 2 선택지와 Step 3 구매 플랜이 함께 나타납니다. 가격/재고는 판매처에서 변동될 수 있습니다.</p>
                 </div>
               ) : null}
 
@@ -656,7 +669,13 @@ export default function Home() {
                       <p className="mt-1 font-mono text-sm font-bold text-slate-900">{currentJob.id}</p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 shadow-sm">
-                      {currentJob.mode === "real-product-composition" ? "구매 가능한 상품" : "브라우저 대체 생성"}
+                      {currentJob.productSearchMeta?.status === "live"
+                        ? "실시간 검색 상품"
+                        : currentJob.productSearchMeta?.status === "partial-fallback"
+                          ? "실시간+기본 카탈로그"
+                          : currentJob.mode === "real-product-composition"
+                            ? "기본 카탈로그 추천"
+                            : "브라우저 대체 생성"}
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-bold text-slate-600">
@@ -667,6 +686,11 @@ export default function Home() {
                   {currentJob.roomAnalysis ? (
                     <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-emerald-700">
                       방 분석 반영: {currentJob.roomAnalysis.roomType} · 채광 {currentJob.roomAnalysis.lightLevel} · {currentJob.roomAnalysis.recommendedPromptAdditions.join(" / ")}
+                    </p>
+                  ) : null}
+                  {currentJob.productSearchMeta ? (
+                    <p className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-bold leading-5 text-amber-700">
+                      {currentJob.productSearchMeta.notice}
                     </p>
                   ) : null}
                   <button
@@ -814,7 +838,7 @@ export default function Home() {
                 <div>
                   <h2 className="text-2xl font-black tracking-[-0.03em] sm:text-3xl">예산 안에서 이 방 완성하기</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
-                    AI 이미지는 스타일 참고용으로 쓰고, 실제 판단 기준은 아래 예산·우선순위·구매 리스트입니다.
+                    AI 이미지는 스타일 참고용으로 쓰고, 실제 판단 기준은 아래 예산·우선순위·구매 리스트입니다. 실시간 검색 상품도 실제 가격·재고는 판매처에서 변동될 수 있습니다.
                   </p>
                 </div>
                 <button
@@ -972,7 +996,7 @@ export default function Home() {
                         <div key={product.id} className="rounded-3xl bg-white p-4 text-slate-950">
                           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                             <div>
-                              <div className="text-xs font-bold text-amber-700">{index + 1}순위 · {product.category} · {product.source} 연동</div>
+                              <div className="text-xs font-bold text-amber-700">{index + 1}순위 · {product.category} · {product.mallName ?? product.source}</div>
                               <h3 className="mt-1 font-black">{product.name}</h3>
                               <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
                               <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
@@ -981,6 +1005,11 @@ export default function Home() {
                               <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
                                 역할: {selectedConcept.highlights[index] ?? "선택한 시안의 핵심 분위기 구현"}
                               </p>
+                              {product.availabilityNote ? (
+                                <p className="mt-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                                  {product.availabilityNote} · 생성 시점 참고 가격
+                                </p>
+                              ) : null}
                               {substitute ? (
                                 <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
                                   저가 대체안: {substitute.name} · {formatWon(substitute.price)}
@@ -1020,12 +1049,17 @@ export default function Home() {
                           <div key={product.id} className="rounded-3xl bg-white/95 p-4 text-slate-950">
                             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                               <div>
-                                <div className="text-xs font-bold text-slate-500">선택 {index + 1} · {product.category} · {product.source} 연동</div>
+                                <div className="text-xs font-bold text-slate-500">선택 {index + 1} · {product.category} · {product.mallName ?? product.source}</div>
                                 <h3 className="mt-1 font-black">{product.name}</h3>
                                 <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
                                 <p className="mt-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
                                   배치 위치: {placement}
                                 </p>
+                                {product.availabilityNote ? (
+                                  <p className="mt-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                                    {product.availabilityNote} · 생성 시점 참고 가격
+                                  </p>
+                                ) : null}
                                 {substitute ? (
                                   <p className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
                                     저가 대체안: {substitute.name} · {formatWon(substitute.price)}

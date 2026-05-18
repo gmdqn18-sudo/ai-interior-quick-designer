@@ -1,3 +1,6 @@
+export type ProductSource = "이케아" | "네이버쇼핑";
+export type ProductLinkType = "product-detail" | "naver-shopping-result";
+
 export type Product = {
   id: string;
   externalId: string;
@@ -6,11 +9,25 @@ export type Product = {
   price: number;
   unitPrice?: number;
   quantity?: number;
-  source: "이케아";
+  source: ProductSource;
   url: string;
-  linkType: "product-detail";
-  verifiedAt: string;
+  linkType: ProductLinkType;
+  verifiedAt?: string;
+  fetchedAt?: string;
   reason: string;
+  imageUrl?: string;
+  mallName?: string;
+  brand?: string;
+  maker?: string;
+  rawCategory?: {
+    category1?: string;
+    category2?: string;
+    category3?: string;
+    category4?: string;
+  };
+  availabilityNote?: "가격/재고 변동 가능";
+  provider?: "static-catalog" | "naver-shopping";
+  searchQuery?: string;
 };
 
 export type DesignConcept = {

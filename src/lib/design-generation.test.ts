@@ -2,6 +2,8 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { DesignGenerationRequest, RoomAnalysis } from "./design-api";
+import type { Product } from "./interior-design";
+import type { ProductSearchMeta } from "./product-search";
 import { composeDesignGenerationJob } from "./design-generation";
 
 const livingRoomAnalysis: RoomAnalysis = {
@@ -62,4 +64,51 @@ test("composeDesignGenerationJob gives server and browser fallback the same reco
     })),
   );
   assert.deepEqual(browserFallbackJob.metrics, serverJob.metrics);
+});
+
+test("composeDesignGenerationJob stores selected live product snapshots and product search meta", () => {
+  const liveProducts: Product[] = Array.from({ length: 4 }, (_, index) => ({
+    id: `naver-snapshot-${index + 1}`,
+    externalId: `snapshot-${index + 1}`,
+    name: `네이버 스냅샷 상품 ${index + 1}`,
+    category: index % 2 === 0 ? "조명" : "가구",
+    price: 50000 + index * 10000,
+    source: "네이버쇼핑",
+    url: `https://search.shopping.naver.com/catalog/snapshot-${index + 1}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: "생성 시점에 선택된 네이버 쇼핑 상품 후보입니다.",
+    provider: "naver-shopping",
+    searchQuery: "카페 조명 블랙 모던",
+    availabilityNote: "가격/재고 변동 가능",
+  }));
+  const productSearchMeta: ProductSearchMeta = {
+    provider: "naver-shopping",
+    status: "live",
+    queries: [],
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    apiCallCount: 1,
+    notice: "네이버 쇼핑 실시간 검색 결과를 기반으로 생성 시점의 상품 후보를 저장했습니다. 가격/재고는 외부 쇼핑몰 사정에 따라 변동될 수 있습니다.",
+  };
+
+  const job = composeDesignGenerationJob(
+    {
+      ...request,
+      prompt: "카페를 블랙 모던으로 꾸미고 싶어요",
+      budget: 300000,
+    },
+    {
+      id: "job_live_snapshot",
+      createdAt: "2026-05-18T00:00:00.000Z",
+      mode: "real-product-composition",
+      productCandidates: liveProducts,
+      productSearchMeta,
+    },
+  );
+
+  const selectedProducts = job.concepts.flatMap((concept) => concept.products);
+  assert.equal(job.productSearchMeta?.status, "live");
+  assert.ok(selectedProducts.length > 0);
+  assert.ok(selectedProducts.every((product) => product.source === "네이버쇼핑"));
+  assert.ok(selectedProducts.every((product) => product.fetchedAt === "2026-05-18T00:00:00.000Z"));
 });

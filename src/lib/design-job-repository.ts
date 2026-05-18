@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 
 import { composeDesignGenerationJob } from "./design-generation";
 import type { DesignGenerationJob, DesignGenerationRequest } from "./design-api";
+import type { Product } from "./interior-design";
+import type { ProductSearchMeta } from "./product-search";
 
 const MAX_STORED_JOBS = 20;
 const STORE_PATH = join(process.cwd(), ".next", "cache", "roomfit-design-jobs.json");
@@ -51,11 +53,18 @@ function pruneJobs() {
   }
 }
 
-export function createRealDesignJob(input: DesignGenerationRequest): DesignGenerationJob {
+export type CreateDesignJobOptions = {
+  productCandidates?: Product[];
+  productSearchMeta?: ProductSearchMeta;
+};
+
+export function createRealDesignJob(input: DesignGenerationRequest, options: CreateDesignJobOptions = {}): DesignGenerationJob {
   const job = composeDesignGenerationJob(input, {
     id: makeJobId(),
     createdAt: new Date().toISOString(),
     mode: "real-product-composition",
+    productCandidates: options.productCandidates,
+    productSearchMeta: options.productSearchMeta,
   });
 
   jobs.set(job.id, job);

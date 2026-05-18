@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createRealDesignJob, listDesignJobs } from "@/lib/design-job-repository";
 import type { DesignGenerationRequest } from "@/lib/design-api";
+import { buildPromptBrief } from "@/lib/ai-interior-engine";
+import { resolveProductCandidatesForDesign } from "@/lib/product-search";
 
 const DEFAULT_BUDGET = 300000;
 const MAX_BUDGET = 10000000;
@@ -57,7 +59,12 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as DesignRequestBody;
   const normalizedBody = normalizeRequestBody(body);
-  const job = createRealDesignJob(normalizedBody);
+  const promptBrief = buildPromptBrief(normalizedBody);
+  const productSearch = await resolveProductCandidatesForDesign(normalizedBody, promptBrief);
+  const job = createRealDesignJob(normalizedBody, {
+    productCandidates: productSearch.products,
+    productSearchMeta: productSearch.meta,
+  });
 
   return NextResponse.json({
     job,
@@ -73,6 +80,7 @@ export async function POST(request: NextRequest) {
       mode: job.mode,
       status: job.status,
       roomAnalysisId: job.roomAnalysis?.id,
+      productSearchMeta: job.productSearchMeta,
     },
   });
 }

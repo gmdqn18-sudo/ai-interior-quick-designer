@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { RoomAnalysis } from "./design-api";
+import type { Product } from "./interior-design";
 import { buildInteriorDesignPlan } from "./ai-interior-engine";
 
 const baseAnalysis: RoomAnalysis = {
@@ -218,6 +219,40 @@ test("buildInteriorDesignPlan changes visible style copy for dark modern prompts
   assert.match(visibleCopy, /블랙·모던/);
   assert.doesNotMatch(visibleCopy, /따뜻한 우드톤/);
   assert.ok(plan.concepts[0].palette.includes("zinc") || plan.concepts[0].palette.includes("slate"));
+});
+
+test("buildInteriorDesignPlan can use injected live product candidates instead of the static productPool", () => {
+  const liveProducts: Product[] = Array.from({ length: 5 }, (_, index) => ({
+    id: `naver-live-light-${index + 1}`,
+    externalId: `live-${index + 1}`,
+    name: `라이브 블랙 카페 조명 ${index + 1}`,
+    category: index < 3 ? "조명" : "가구",
+    price: 30000 + index * 10000,
+    source: "네이버쇼핑",
+    url: `https://search.shopping.naver.com/catalog/live-${index + 1}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: "네이버 쇼핑 실시간 검색으로 찾은 카페 상품 후보입니다.",
+    provider: "naver-shopping",
+    searchQuery: "카페 조명 블랙 모던",
+    availabilityNote: "가격/재고 변동 가능",
+  }));
+
+  const plan = buildInteriorDesignPlan(
+    {
+      budget: 300000,
+      prompt: "카페를 블랙 모던으로 꾸미고 싶어요",
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    },
+    { productCandidates: liveProducts },
+  );
+
+  const selectedProducts = plan.concepts.flatMap((concept) => concept.products);
+  assert.ok(selectedProducts.length > 0);
+  assert.ok(selectedProducts.every((product) => product.source === "네이버쇼핑"));
+  assert.ok(selectedProducts.every((product) => product.linkType === "naver-shopping-result"));
 });
 
 test("buildInteriorDesignPlan exposes metrics for API responses and recent history", () => {

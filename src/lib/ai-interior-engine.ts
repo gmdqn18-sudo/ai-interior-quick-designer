@@ -31,6 +31,10 @@ export type InteriorPromptBrief = {
   analysisSummary: string | null;
 };
 
+export type BuildInteriorDesignPlanOptions = {
+  productCandidates?: Product[];
+};
+
 export type InteriorDesignPlan = {
   promptBrief: InteriorPromptBrief;
   concepts: DesignConcept[];
@@ -287,7 +291,7 @@ function expandQuantitiesForBudget(picked: Product[], brief: InteriorPromptBrief
   return expanded;
 }
 
-function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number) {
+function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number, productCandidates: Product[]) {
   const budgetCap = Math.max(10000, Math.floor(budget * 0.96));
   const isLargeCommercialPlan = brief.priorityTags.includes("commercial") && budget >= 2_000_000;
   const targetSpend = isLargeCommercialPlan
@@ -298,7 +302,7 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
         ? Math.floor(budget * 0.65)
         : 0;
   const maxProducts = isLargeCommercialPlan ? 18 : brief.budgetTier === "premium" ? 12 : brief.budgetTier === "standard" ? 8 : 5;
-  const sorted = productPool
+  const sorted = productCandidates
     .map((product, index) => ({ product, score: scoreProduct(product, template, brief, index) }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score || (brief.budgetTier === "starter" ? a.product.price - b.product.price : b.product.price - a.product.price));
@@ -316,7 +320,7 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
   }
 
   if (targetSpend > 0 && total < targetSpend) {
-    const fillers = productPool
+    const fillers = productCandidates
       .filter((product) => !picked.some((item) => item.id === product.id))
       .sort((a, b) => {
         const templateCategoryScore = Number(template.categories.includes(b.category)) - Number(template.categories.includes(a.category));
@@ -335,7 +339,7 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
   }
 
   if (picked.length < 3) {
-    for (const product of productPool.slice().sort((a, b) => a.price - b.price)) {
+    for (const product of productCandidates.slice().sort((a, b) => a.price - b.price)) {
       if (picked.some((item) => item.id === product.id)) continue;
       if (!canAddProduct(product, picked, brief)) continue;
       if (total + product.price > budgetCap) continue;
@@ -422,9 +426,9 @@ function getHighlightsForBrief(template: ConceptTemplate, brief: InteriorPromptB
   ].slice(0, 4);
 }
 
-function buildConceptsForInput(input: DesignGenerationRequest, brief: InteriorPromptBrief): DesignConcept[] {
+function buildConceptsForInput(input: DesignGenerationRequest, brief: InteriorPromptBrief, productCandidates: Product[]): DesignConcept[] {
   return conceptTemplates.map((template, index) => {
-    const products = selectProducts(template, brief, input.budget);
+    const products = selectProducts(template, brief, input.budget, productCandidates);
     const usedBudget = products.reduce((sum, product) => sum + product.price, 0);
     const matchedTags = template.tags.filter((tag) => brief.priorityTags.includes(tag)).length;
     const generationShift = (input.generation + index) % 3;
@@ -461,12 +465,13 @@ function buildMetrics(concepts: DesignConcept[], history: DesignConcept[]): Inte
   };
 }
 
-export function buildInteriorDesignPlan(input: DesignGenerationRequest): InteriorDesignPlan {
+export function buildInteriorDesignPlan(input: DesignGenerationRequest, options: BuildInteriorDesignPlanOptions = {}): InteriorDesignPlan {
   const promptBrief = buildPromptBrief(input);
-  const concepts = buildConceptsForInput(input, promptBrief);
+  const productCandidates = options.productCandidates?.length ? options.productCandidates : productPool;
+  const concepts = buildConceptsForInput(input, promptBrief, productCandidates);
   const history = Array.from({ length: input.generation }, (_, index) => {
     const generation = input.generation - index;
-    return buildConceptsForInput({ ...input, generation }, promptBrief);
+    return buildConceptsForInput({ ...input, generation }, promptBrief, productCandidates);
   })
     .flat()
     .slice(0, 9);

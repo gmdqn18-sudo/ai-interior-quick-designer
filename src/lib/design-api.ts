@@ -1,4 +1,5 @@
 import type { DesignConcept } from "./interior-design";
+import type { ProductSearchMeta } from "./product-search";
 
 export type DesignGenerationStatus = "queued" | "completed" | "failed";
 
@@ -48,6 +49,7 @@ export type DesignGenerationJob = DesignGenerationRequest & {
   mode: DesignGenerationMode;
   concepts: DesignConcept[];
   history: DesignConcept[];
+  productSearchMeta?: ProductSearchMeta;
   metrics: {
     conceptCount: number;
     historyCount: number;
@@ -71,6 +73,7 @@ export type DesignGenerationResponse = {
     mode: DesignGenerationMode;
     status: DesignGenerationStatus;
     roomAnalysisId?: string;
+    productSearchMeta?: ProductSearchMeta;
   };
 };
 

@@ -68,10 +68,21 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-stretch">
           <div className="rounded-[2.5rem] border border-black/5 bg-white p-6 shadow-[var(--commercial-shadow)] sm:p-8">
             <div className="inline-flex rounded-full bg-rose-50 px-4 py-2 text-xs font-black text-[#ff385c]">
-              {job.mode === "real-product-composition" ? "실제 상품 카탈로그 기반 결과" : "브라우저 대체 생성 결과"}
+              {job.mode === "real-product-composition"
+                ? job.productSearchMeta?.status === "live"
+                  ? "네이버 쇼핑 실시간 검색 기반 결과"
+                  : job.productSearchMeta?.status === "partial-fallback"
+                    ? "실시간 검색+기본 카탈로그 보완 결과"
+                    : "기본 카탈로그 fallback 결과"
+                : "브라우저 대체 생성 결과"}
             </div>
             <h1 className="mt-5 text-4xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">{summary.heroTitle}</h1>
             <p className="mt-4 max-w-2xl text-base leading-8 text-slate-700">{summary.heroStrategy}</p>
+            {job.productSearchMeta ? (
+              <p className="mt-4 rounded-3xl bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-800">
+                {job.productSearchMeta.notice}
+              </p>
+            ) : null}
 
             <div className="mt-6 grid gap-3 sm:grid-cols-4">
               <Metric label="설정 예산" value={summary.budgetLabel} />
@@ -176,9 +187,14 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
                 <div key={product.id} className="rounded-3xl bg-white p-4 text-slate-950">
                   <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                     <div>
-                      <div className="text-xs font-bold text-amber-700">{product.category} · {product.source}</div>
+                      <div className="text-xs font-bold text-amber-700">{product.category} · {product.mallName ?? product.source}</div>
                       <h3 className="mt-1 font-black">{product.name}</h3>
                       <p className="mt-1 text-sm leading-6 text-slate-600">{product.reason}</p>
+                      {product.availabilityNote ? (
+                        <p className="mt-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                          {product.availabilityNote} · 생성 시점 참고 가격
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="font-black">{formatProductPrice(product)}</span>
