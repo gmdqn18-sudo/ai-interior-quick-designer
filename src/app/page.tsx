@@ -21,11 +21,39 @@ import {
 const formatter = new Intl.NumberFormat("ko-KR");
 
 const renderProgressSteps = [
-  "선택한 실제 상품 이미지를 가져오는 중",
-  "상품을 방 사진 위에 1차 배치하는 중",
+  "핵심 실제 상품 이미지를 가져오는 중",
+  "최대 3개 상품을 방 사진 위에 1차 배치하는 중",
   "공간 톤과 색온도를 맞추는 중",
   "조명과 접지 그림자를 정리하는 중",
 ] as const;
+
+const productCompositeCategoryPriority = ["러그", "조명", "수납", "침구", "패브릭", "커튼", "책상/테이블", "거실가구", "소품", "의자"];
+
+function selectProductsForComposite(products: Product[], maxProducts = 3) {
+  const limit = Math.max(1, Math.min(3, maxProducts));
+  const withImages = products.filter((product) => Boolean(product.imageUrl));
+  const selected: Product[] = [];
+  const usedCategories = new Set<string>();
+
+  const trySelect = (product: Product) => {
+    if (selected.length >= limit || usedCategories.has(product.category)) return;
+    selected.push(product);
+    usedCategories.add(product.category);
+  };
+
+  for (const category of productCompositeCategoryPriority) {
+    const product = withImages.find((candidate) => candidate.category === category);
+    if (product) trySelect(product);
+    if (selected.length >= limit) break;
+  }
+
+  for (const product of withImages) {
+    trySelect(product);
+    if (selected.length >= limit) break;
+  }
+
+  return selected;
+}
 
 function formatWon(amount: number) {
   return `${formatter.format(amount)}원`;
@@ -52,7 +80,7 @@ function getRenderResultBadge(mode: RenderResultMode | null, hasImage: boolean) 
   if (mode === "product-composite-edit") {
     return {
       label: "최종 AI 보정본",
-      detail: "대표 상품 1개를 먼저 배치한 뒤 조명과 색감을 보정한 결과입니다.",
+      detail: "핵심 상품 최대 3개를 먼저 배치한 뒤 조명과 색감을 보정한 결과입니다.",
       className: "bg-emerald-200 text-emerald-950",
     };
   }
@@ -267,8 +295,8 @@ export default function Home() {
   const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
   const [generatedAfterImages, setGeneratedAfterImages] = useState<Record<string, string>>({});
   const [generatedAfterModes, setGeneratedAfterModes] = useState<Record<string, RenderResultMode>>({});
-  const [renderedProductIds, setRenderedProductIds] = useState<Record<string, string | null>>({});
-  const [afterImageNotice, setAfterImageNotice] = useState("결과 이미지는 대표 상품 배치와 스타일을 확인하는 출발점입니다. 실제 구매는 별도 상품 카드의 가격·옵션·사이즈를 확인한 뒤 판단하세요.");
+  const [renderedProductIds, setRenderedProductIds] = useState<Record<string, string[]>>({});
+  const [afterImageNotice, setAfterImageNotice] = useState("결과 이미지는 핵심 상품 배치와 스타일을 확인하는 출발점입니다. 실제 구매는 별도 상품 카드의 가격·옵션·사이즈를 확인한 뒤 판단하세요.");
   const [isRenderingAfter, setIsRenderingAfter] = useState(false);
   const [renderProgressStep, setRenderProgressStep] = useState(0);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
@@ -295,9 +323,12 @@ export default function Home() {
   const generatedAfterMode = generatedAfterModes[selectedConcept.id] ?? null;
   const renderResultBadge = getRenderResultBadge(generatedAfterMode, Boolean(generatedAfterImage));
   const activeProduct = selectedConcept.products.find((product) => product.id === activeProductId) ?? null;
-  const productCompositeTarget = (activeProduct?.imageUrl ? activeProduct : selectedConcept.products.find((product) => product.imageUrl)) ?? null;
-  const renderedProduct = selectedConcept.products.find((product) => product.id === renderedProductIds[selectedConcept.id]) ?? null;
-  const visibleProductCompositeTarget = generatedAfterImage ? renderedProduct : productCompositeTarget;
+  const productCompositeTargets = selectProductsForComposite(selectedConcept.products);
+  const productCompositeTarget = (activeProduct?.imageUrl ? activeProduct : productCompositeTargets[0]) ?? null;
+  const renderedProductIdSet = new Set(renderedProductIds[selectedConcept.id] ?? []);
+  const renderedProducts = selectedConcept.products.filter((product) => renderedProductIdSet.has(product.id));
+  const visibleProductCompositeTargets = generatedAfterImage ? renderedProducts : productCompositeTargets;
+  const visibleProductCompositeTarget = visibleProductCompositeTargets[0] ?? null;
   const visibleProductPlacement = visibleProductCompositeTarget ? getProductOverlayPlacement(visibleProductCompositeTarget) : null;
   const renderPreviewImage = generatedAfterImage || previewUrl;
   const currentRenderStep = renderProgressSteps[renderProgressStep % renderProgressSteps.length];
@@ -478,7 +509,7 @@ export default function Home() {
 
     setIsRenderingAfter(true);
     setRenderProgressStep(0);
-    setAfterImageNotice("선택한 실제 상품을 방 사진 위에 배치하고 조명·그림자를 맞추는 중입니다. 화면이 멈춘 것이 아니라 상품 합성과 AI 보정이 진행 중입니다.");
+    setAfterImageNotice("러그·조명·수납 우선으로 핵심 실제 상품을 최대 3개까지 방 사진 위에 배치하고 조명·그림자를 맞추는 중입니다. 화면이 멈춘 것이 아니라 상품 합성과 AI 보정이 진행 중입니다.");
 
     try {
       const response = await fetch("/api/render-after", {
@@ -499,6 +530,14 @@ export default function Home() {
                 url: productCompositeTarget.url,
               }
             : undefined,
+          productReferences: productCompositeTargets.map((product) => ({
+            id: product.id,
+            name: product.name,
+            category: product.category,
+            imageUrl: product.imageUrl,
+            source: product.source,
+            url: product.url,
+          })),
         }),
       });
       const data = (await response.json().catch(() => ({}))) as Partial<RenderAfterResponse> & { error?: string };
@@ -510,12 +549,15 @@ export default function Home() {
       const isProductCompositeResult = data.mode === "product-composite-edit" || data.mode === "product-composite-preview";
       setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
       setGeneratedAfterModes((current) => ({ ...current, [selectedConcept.id]: data.mode ?? "mock-image-preview" }));
-      setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: isProductCompositeResult ? productCompositeTarget?.id ?? null : null }));
+        const renderedIds = isProductCompositeResult
+        ? data.meta?.productReferenceIds?.filter((id): id is string => typeof id === "string") ?? productCompositeTargets.map((product) => product.id)
+        : [];
+      setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: renderedIds }));
       setAfterImageNotice(
         data.mode === "product-composite-edit"
-          ? "선택 상품 이미지 1개를 원본 사진 위에 먼저 올린 뒤 조명·그림자·색감을 보정했습니다. 상품 썸네일과 결과 이미지를 함께 비교해 주세요."
+          ? "핵심 상품을 원본 사진 위에 먼저 올린 뒤 조명·그림자·색감을 보정했습니다. 상품 썸네일과 결과 이미지를 함께 비교해 주세요."
           : data.mode === "product-composite-preview"
-            ? "AI 보정이 제한 시간 안에 끝나지 않아, 선택 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 형태 확인용입니다."
+            ? "AI 보정이 제한 시간 안에 끝나지 않아, 핵심 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 형태 확인용입니다."
           : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있으니, 별도 구매 후보 카드에서 상품 정보를 확인하세요.",
       );
     } catch {
@@ -900,7 +942,7 @@ export default function Home() {
                 <div>
                   <h2 className="text-2xl font-black tracking-[-0.03em] sm:text-3xl">예산 안에서 이 방 완성하기</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
-                    먼저 시안 방향을 고르면 대표 상품 1개를 방 사진에 배치해 봅니다. 전체 상품 리스트는 이미지와 별도로 확인하는 구매 후보입니다.
+                    먼저 시안 방향을 고르면 러그·조명·수납 우선의 핵심 상품을 최대 3개까지 방 사진에 함께 배치해 봅니다. 나머지 상품 리스트는 이미지와 별도로 확인하는 구매 후보입니다.
                   </p>
                 </div>
                 <button
@@ -929,11 +971,11 @@ export default function Home() {
                 <div className="rounded-3xl bg-white/10 p-4">
                   <div className="text-xs font-black text-amber-200">바꿀 것</div>
                   <p className="mt-2 text-sm font-bold leading-6 text-white">{selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">구매 후보 중 대표 상품을 먼저 사진에 배치하고, 나머지 후보는 별도 카드로 확인합니다.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">구매 후보 중 핵심 상품 최대 3개를 먼저 사진에 배치하고, 나머지 후보는 별도 카드로 확인합니다.</p>
                 </div>
                 <div className="rounded-3xl bg-white/10 p-4">
                   <div className="text-xs font-black text-amber-200">확인 순서</div>
-                  <p className="mt-2 text-sm font-bold leading-6 text-white">대표 상품 배치 결과 확인 후 별도 구매 후보 검토</p>
+                  <p className="mt-2 text-sm font-bold leading-6 text-white">이미지에 반영된 상품 확인 후 별도 구매 후보 검토</p>
                   <p className="mt-1 text-xs leading-5 text-slate-400">결과 이미지는 구매 판단의 출발점이고, 실제 구매는 각 상품 카드의 가격·옵션·사이즈를 확인한 뒤 진행합니다.</p>
                 </div>
               </div>
@@ -984,7 +1026,7 @@ export default function Home() {
                               </div>
                             ))}
                           </div>
-                          <p className="mt-3 text-xs font-bold leading-5 text-slate-300">전체 구매 후보가 모두 이미지에 들어가는 것은 아니며, 대표 상품 1개를 먼저 배치해 확인합니다. 완료가 늦어지면 1차 상품 합성 결과를 먼저 보여드립니다.</p>
+                          <p className="mt-3 text-xs font-bold leading-5 text-slate-300">전체 구매 후보가 모두 이미지에 들어가는 것은 아니며, 핵심 상품 최대 3개만 먼저 배치해 확인합니다. 완료가 늦어지면 1차 상품 합성 결과를 먼저 보여드립니다.</p>
                         </div>
                         {visibleProductCompositeTarget ? (
                           <div className="absolute bottom-4 left-4 right-4 rounded-3xl border border-amber-200/30 bg-slate-950/70 p-3 text-white backdrop-blur-xl">
@@ -994,7 +1036,7 @@ export default function Home() {
                                 <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 대표 상품`} className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain" />
                               ) : null}
                               <div className="min-w-0">
-                                <p className="text-xs font-black text-amber-100">이번 이미지에 먼저 배치하는 상품</p>
+                                <p className="text-xs font-black text-amber-100">이번 이미지에 먼저 배치하는 핵심 상품</p>
                                 <p className="truncate text-sm font-black">{visibleProductCompositeTarget.name}</p>
                                 <p className="text-[11px] font-bold text-slate-300">결과 이미지와 아래 썸네일을 함께 비교해 주세요.</p>
                               </div>
@@ -1037,28 +1079,35 @@ export default function Home() {
                     <div className="mt-3 rounded-3xl border border-amber-200/30 bg-white/10 p-4 text-xs font-bold leading-5 text-slate-200">
                       <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                         <div>
-                          <p className="text-sm font-black text-amber-100">이번 이미지에 사용한 상품</p>
-                          <p className="mt-1 text-slate-300">전체 구매 후보 중 대표 상품 1개를 먼저 방 사진에 배치했습니다.</p>
+                          <p className="text-sm font-black text-amber-100">이미지에 반영된 상품</p>
+                          <p className="mt-1 text-slate-300">러그·조명·수납 우선으로 최대 3개 핵심 상품만 방 사진에 배치했습니다.</p>
                         </div>
-                        <span className="rounded-full bg-amber-200 px-3 py-1 text-[11px] font-black text-slate-950">대표 상품 1개</span>
+                        <span className="rounded-full bg-amber-200 px-3 py-1 text-[11px] font-black text-slate-950">{visibleProductCompositeTargets.length}개 반영</span>
                       </div>
-                      <div className="flex items-center gap-3 rounded-2xl bg-slate-950/35 p-3">
-                        {visibleProductCompositeTarget.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 상품 이미지`} className="h-16 w-16 shrink-0 rounded-xl bg-white object-contain" />
-                        ) : null}
-                        <div className="min-w-0">
-                          <p className="text-amber-100">이미지 속 반영 위치: {visibleProductPlacement?.label ?? "대표 배치 영역"}</p>
-                          <p className="truncate text-sm font-black text-white">{visibleProductCompositeTarget.name}</p>
-                          <p className="text-slate-300">{formatProductPrice(visibleProductCompositeTarget)} · {visibleProductCompositeTarget.mallName ?? visibleProductCompositeTarget.source}</p>
-                          <p className="text-slate-400">결과 이미지와 상품 썸네일을 함께 보고 형태·색감이 구매 기대와 맞는지 확인하세요.</p>
-                        </div>
+                      <div className="grid gap-2">
+                        {visibleProductCompositeTargets.map((product) => {
+                          const placement = getProductOverlayPlacement(product);
+                          return (
+                            <div key={`composited-${product.id}`} className="flex items-center gap-3 rounded-2xl bg-slate-950/35 p-3">
+                              {product.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={product.imageUrl} alt={`${product.name} 상품 이미지`} className="h-16 w-16 shrink-0 rounded-xl bg-white object-contain" />
+                              ) : null}
+                              <div className="min-w-0">
+                                <p className="text-amber-100">이미지 속 반영 위치: {placement.label}</p>
+                                <p className="truncate text-sm font-black text-white">{product.name}</p>
+                                <p className="text-slate-300">{formatProductPrice(product)} · {product.mallName ?? product.source}</p>
+                                <p className="text-slate-400">결과 이미지와 상품 썸네일을 함께 보고 형태·색감이 구매 기대와 맞는지 확인하세요.</p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
                     <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-300">
                       {generatedAfterImage
-                        ? "이번 결과는 대표 상품 합성이 아니라 분위기 참고 이미지로 생성되었습니다. 아래 구매 후보와 별도로 확인하세요."
+                        ? "이번 결과는 상품 합성이 아니라 분위기 참고 이미지로 생성되었습니다. 아래 구매 후보와 별도로 확인하세요."
                         : "이미지 URL이 있는 대표 상품이 없어 상품 배치 대신 분위기 참고 이미지로 진행합니다."}
                     </div>
                   )}
@@ -1071,7 +1120,7 @@ export default function Home() {
                     disabled={isRenderingAfter || !roomImageDataUrl}
                     className="mt-3 w-full rounded-2xl bg-[#ff385c] px-4 py-3 text-xs font-black text-white transition hover:-translate-y-0.5 hover:bg-[#e00b41] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:hover:translate-y-0"
                   >
-                    {isRenderingAfter ? "선택 상품 배치와 조명 보정 중..." : generatedAfterImage ? "상품 기반 결과 다시 생성" : "선택 상품 넣어 결과 이미지 만들기"}
+                    {isRenderingAfter ? "핵심 상품 배치와 조명 보정 중..." : generatedAfterImage ? "상품 기반 결과 다시 생성" : "핵심 상품 넣어 결과 이미지 만들기"}
                   </button>
                 </div>
               </div>
@@ -1084,7 +1133,7 @@ export default function Home() {
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
                       {canShowImageProductMapping
-                        ? "결과 이미지는 대표 상품 1개를 먼저 배치한 참고 결과입니다. 아래 목록은 예산과 요청 조건을 기준으로 따로 확인해야 할 구매 후보입니다."
+                        ? "결과 이미지는 핵심 상품만 먼저 배치한 참고 결과입니다. 아래 목록은 예산과 요청 조건을 기준으로 따로 확인해야 할 별도 구매 후보입니다."
                         : "예산과 프롬프트 기준의 구매 후보를 준비했습니다. 이미지 생성 후 대표 상품과 전체 구매 후보를 분리해서 확인할 수 있습니다."}
                     </p>
                   </div>
@@ -1115,7 +1164,7 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="mt-3 rounded-2xl border border-dashed border-amber-300/50 bg-slate-950/20 p-4 text-center text-xs font-bold leading-5 text-slate-300">
-                    먼저 위의 “선택 상품 넣어 결과 이미지 만들기” 버튼을 눌러 대표 상품 배치 결과를 확인한 뒤, 예산과 프롬프트 기준의 별도 구매 후보 리스트를 확인하세요.
+                    먼저 위의 “핵심 상품 넣어 결과 이미지 만들기” 버튼을 눌러 이미지 반영 상품을 확인한 뒤, 예산과 프롬프트 기준의 별도 구매 후보 리스트를 확인하세요.
                   </div>
                 )}
               </div>

@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildAfterImagePrompt,
-  buildProductCompositePrompt,
+  buildMultiProductCompositePrompt,
   normalizeRenderAfterRequest,
   type ParsedImageData,
   type RenderAfterInput,
   type RenderAfterRequest,
   type RenderAfterResponse,
 } from "@/lib/after-image";
-import { composeProductImageOntoRoom, type ProductCompositionResult } from "@/lib/product-composition";
+import { composeProductsImageOntoRoom, type MultiProductCompositionResult } from "@/lib/product-composition";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -73,12 +73,29 @@ async function callOpenAIImageEdit(input: { image: ParsedImageData; prompt: stri
   return { imageUrl, prompt: input.prompt };
 }
 
+function compositionMeta(input: RenderAfterInput, composition?: MultiProductCompositionResult, model = OPENAI_IMAGE_MODEL, fallbackReason?: string): RenderAfterResponse["meta"] {
+  const productIds = composition?.placements.map((item) => item.productId) ?? input.productReferences?.map((product) => product.id) ?? (input.productReference ? [input.productReference.id] : []);
+  const placementLabels = composition?.placements.map((item) => item.placement.label);
+
+  return {
+    model,
+    conceptId: input.concept.id,
+    generatedAt: new Date().toISOString(),
+    productReferenceId: productIds[0],
+    productReferenceIds: productIds.length ? productIds : undefined,
+    compositionMode: composition ? (composition.placements.length > 1 ? "multi-product-preset" : "single-product-preset") : undefined,
+    placementLabel: placementLabels?.[0],
+    placementLabels,
+    fallbackReason,
+  };
+}
+
 function buildCompositePreviewResponse(
   input: RenderAfterInput,
   prepared: {
     image: ParsedImageData;
     prompt: string;
-    composition?: ProductCompositionResult;
+    composition?: MultiProductCompositionResult;
     fallbackReason?: string;
   },
   error: string,
@@ -89,15 +106,7 @@ function buildCompositePreviewResponse(
     mode: "product-composite-preview",
     provider: "server-composite",
     error,
-    meta: {
-      model: "server-composite",
-      conceptId: input.concept.id,
-      generatedAt: new Date().toISOString(),
-      productReferenceId: input.productReference?.id,
-      compositionMode: prepared.composition ? "single-product-preset" : undefined,
-      placementLabel: prepared.composition?.placement.label,
-      fallbackReason: prepared.fallbackReason,
-    },
+    meta: compositionMeta(input, prepared.composition, "server-composite", prepared.fallbackReason),
   };
 }
 
@@ -105,7 +114,7 @@ async function prepareRenderInput(input: RenderAfterInput): Promise<{
   image: ParsedImageData;
   prompt: string;
   mode: "openai-image-edit" | "product-composite-edit";
-  composition?: ProductCompositionResult;
+  composition?: MultiProductCompositionResult;
   fallbackReason?: string;
 }> {
   const stylePrompt = buildAfterImagePrompt({
@@ -113,21 +122,27 @@ async function prepareRenderInput(input: RenderAfterInput): Promise<{
     userPrompt: input.userPrompt,
     keptFurniture: input.keptFurniture,
   });
+  const productReferences = input.productReferences?.length
+    ? input.productReferences
+    : input.productReference?.imageUrl
+      ? [input.productReference]
+      : [];
 
-  if (!input.productReference?.imageUrl) {
+  if (productReferences.length === 0) {
     return { image: input.image, prompt: stylePrompt, mode: "openai-image-edit" };
   }
 
   try {
-    const composition = await composeProductImageOntoRoom(input.image.bytes, input.image.mimeType, input.productReference);
+    const composition = await composeProductsImageOntoRoom(input.image.bytes, input.image.mimeType, productReferences);
+    const placementLabels = composition.placements.map((item) => item.placement.label);
     return {
       image: { bytes: composition.bytes, mimeType: composition.mimeType },
-      prompt: buildProductCompositePrompt({
+      prompt: buildMultiProductCompositePrompt({
         concept: input.concept,
         userPrompt: input.userPrompt,
         keptFurniture: input.keptFurniture,
-        productReference: input.productReference,
-        placementLabel: composition.placement.label,
+        productReferences: productReferences.filter((product) => composition.placements.some((placement) => placement.productId === product.id)),
+        placementLabels,
       }),
       mode: "product-composite-edit",
       composition,
@@ -170,13 +185,7 @@ export async function POST(request: NextRequest) {
       mode: "mock-image-preview",
       provider: "mock",
       error: "AI 보정 설정이 아직 준비되지 않아 실제 이미지 보정은 건너뛰었습니다.",
-      meta: {
-        model: "none",
-        conceptId: normalized.input.concept.id,
-        generatedAt: new Date().toISOString(),
-        productReferenceId: normalized.input.productReference?.id,
-        fallbackReason: prepared.fallbackReason,
-      },
+      meta: compositionMeta(normalized.input, undefined, "none", prepared.fallbackReason),
     };
     return NextResponse.json(response, { status: 200 });
   }
@@ -188,15 +197,7 @@ export async function POST(request: NextRequest) {
       prompt: result.prompt,
       mode: prepared.mode,
       provider: "openai",
-      meta: {
-        model: OPENAI_IMAGE_MODEL,
-        conceptId: normalized.input.concept.id,
-        generatedAt: new Date().toISOString(),
-        productReferenceId: normalized.input.productReference?.id,
-        compositionMode: prepared.composition ? "single-product-preset" : undefined,
-        placementLabel: prepared.composition?.placement.label,
-        fallbackReason: prepared.fallbackReason,
-      },
+      meta: compositionMeta(normalized.input, prepared.composition, OPENAI_IMAGE_MODEL, prepared.fallbackReason),
     };
 
     return NextResponse.json(response);
@@ -218,13 +219,7 @@ export async function POST(request: NextRequest) {
       mode: "mock-image-preview",
       provider: "mock",
       error: error instanceof Error ? error.message : "이미지 생성 중 알 수 없는 오류가 발생했습니다.",
-      meta: {
-        model: OPENAI_IMAGE_MODEL,
-        conceptId: normalized.input.concept.id,
-        generatedAt: new Date().toISOString(),
-        productReferenceId: normalized.input.productReference?.id,
-        fallbackReason: prepared.fallbackReason,
-      },
+      meta: compositionMeta(normalized.input, undefined, OPENAI_IMAGE_MODEL, prepared.fallbackReason),
     };
 
     return NextResponse.json(response, { status: 502 });

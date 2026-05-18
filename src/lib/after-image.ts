@@ -9,6 +9,7 @@ export type RenderAfterRequest = {
   userPrompt?: unknown;
   keptFurniture?: unknown;
   productReference?: unknown;
+  productReferences?: unknown;
 };
 
 export type ParsedImageData = {
@@ -22,6 +23,7 @@ export type RenderAfterInput = {
   userPrompt: string;
   keptFurniture: string[];
   productReference?: ProductReference;
+  productReferences?: ProductReference[];
 };
 
 export type RenderAfterResponse = {
@@ -35,8 +37,10 @@ export type RenderAfterResponse = {
     conceptId: string;
     generatedAt: string;
     productReferenceId?: string;
-    compositionMode?: "single-product-preset";
+    productReferenceIds?: string[];
+    compositionMode?: "single-product-preset" | "multi-product-preset";
     placementLabel?: string;
+    placementLabels?: string[];
     fallbackReason?: string;
   };
 };
@@ -71,6 +75,17 @@ function isProductReference(value: unknown): value is ProductReference {
       typeof (value as ProductReference).url === "string" &&
       (value as ProductReference).imageUrl.startsWith("http"),
   );
+}
+
+function sanitizeProductReference(product: ProductReference): ProductReference {
+  return {
+    id: product.id.slice(0, 120),
+    name: product.name.slice(0, 160),
+    category: product.category.slice(0, 40),
+    imageUrl: product.imageUrl,
+    source: product.source.slice(0, 40) as ProductReference["source"],
+    url: product.url,
+  };
 }
 
 export function imageDataUrlToBlobParts(imageDataUrl: string): ParsedImageData {
@@ -143,24 +158,46 @@ export function buildProductCompositePrompt(input: {
   productReference: ProductReference;
   placementLabel?: string;
 }) {
+  return buildMultiProductCompositePrompt({
+    concept: input.concept,
+    userPrompt: input.userPrompt,
+    keptFurniture: input.keptFurniture,
+    productReferences: [input.productReference],
+    placementLabels: input.placementLabel ? [input.placementLabel] : undefined,
+  });
+}
+
+export function buildMultiProductCompositePrompt(input: {
+  concept: DesignConcept;
+  userPrompt: string;
+  keptFurniture: string[];
+  productReferences: ProductReference[];
+  placementLabels?: string[];
+}) {
   const keptFurnitureText = input.keptFurniture.length > 0 ? input.keptFurniture.join(", ") : "no specific furniture";
   const imageContext = inferImageContext(input);
+  const productLines = input.productReferences
+    .slice(0, 3)
+    .map((product, index) => {
+      const placement = input.placementLabels?.[index] ?? "preset placement";
+      return `${index + 1}. ${product.category}: ${product.name} — pre-composited area: ${placement}`;
+    });
 
   return [
-    "Use the provided room photo as a pre-composited image: one real product image has already been placed on top of the original room photo.",
-    "CRITICAL PRODUCT LOCK: preserve the selected product exactly as the visible product in the input image.",
-    "Do not alter the product identity, silhouette, color, pattern, proportions, logo, material cues, or visible details.",
-    "Do not replace the product with a similar item and do not hallucinate a different product.",
-    "Only harmonize lighting, contact shadow, color temperature, edge blending, and subtle spatial ambience around the already-placed product.",
+    `Use the provided room photo as a pre-composited image: ${productLines.length} real product image${productLines.length > 1 ? "s have" : " has"} already been placed on top of the original room photo.`,
+    "CRITICAL MULTI-PRODUCT LOCK: preserve every listed product exactly as a visible product in the input image.",
+    "Do not alter any product identity, silhouette, color, pattern, proportions, logo, material cues, or visible details.",
+    "Do not replace any product with a similar item and do not hallucinate new products.",
+    "Only harmonize lighting, contact shadows, color temperature, edge blending, and subtle spatial ambience around the already-placed products.",
     "Keep the exact same camera position, lens perspective, field of view, crop, and room geometry as the input photo.",
     "Preserve fixed architecture: walls, floor, ceiling lines, door, window, built-in structures, and visible room boundaries.",
     imageContext,
-    `Selected real product to preserve: ${input.productReference.category}: ${input.productReference.name}`,
-    `Preset area used before AI harmonization: ${input.placementLabel ?? "single product preset"}`,
+    "Selected real products to preserve:",
+    productLines.join("\n"),
     `Design concept title: ${input.concept.title}`,
     `User requested mood and constraints: ${input.userPrompt || "use the selected concept and retained furniture; do not invent an extra default style"}`,
     `Furniture to keep and visually retain in the same approximate location: ${keptFurnitureText}`,
-    "The result is a product-identity preservation test, not a free redesign. If anything conflicts, prioritize preserving the selected product over making the room prettier.",
+    "The result is a real-product identity preservation test, not a free redesign. If anything conflicts, prioritize preserving all selected products over making the room prettier.",
     "No text, no labels, no watermark, no people, no extra UI elements.",
   ].join("\n");
 }
@@ -181,15 +218,13 @@ export function normalizeRenderAfterRequest(body: RenderAfterRequest): Normalize
       ? body.keptFurniture.filter((item): item is string => typeof item === "string").slice(0, 10)
       : [];
     const productReference = isProductReference(body.productReference)
-      ? {
-          id: body.productReference.id.slice(0, 120),
-          name: body.productReference.name.slice(0, 160),
-          category: body.productReference.category.slice(0, 40),
-          imageUrl: body.productReference.imageUrl,
-          source: body.productReference.source.slice(0, 40) as ProductReference["source"],
-          url: body.productReference.url,
-        }
+      ? sanitizeProductReference(body.productReference)
       : undefined;
+    const productReferences = Array.isArray(body.productReferences)
+      ? body.productReferences.filter(isProductReference).slice(0, 3).map(sanitizeProductReference)
+      : productReference
+        ? [productReference]
+        : undefined;
 
     return {
       ok: true,
@@ -199,6 +234,7 @@ export function normalizeRenderAfterRequest(body: RenderAfterRequest): Normalize
         userPrompt,
         keptFurniture,
         productReference,
+        productReferences,
       },
     };
   } catch (error) {

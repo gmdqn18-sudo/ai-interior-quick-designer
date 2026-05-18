@@ -17,12 +17,27 @@ export type ProductCompositionPlacement = {
   maxHeightRatio: number;
 };
 
+export type ProductCompositionItemResult = {
+  productId: string;
+  productName: string;
+  category: string;
+  placement: ProductCompositionPlacement;
+  productSize: { width: number; height: number };
+};
+
 export type ProductCompositionResult = {
   bytes: Uint8Array;
   mimeType: "image/png";
   placement: ProductCompositionPlacement;
   roomSize: { width: number; height: number };
   productSize: { width: number; height: number };
+};
+
+export type MultiProductCompositionResult = {
+  bytes: Uint8Array;
+  mimeType: "image/png";
+  placements: ProductCompositionItemResult[];
+  roomSize: { width: number; height: number };
 };
 
 export type ComposeProductImageOptions = {
@@ -35,6 +50,42 @@ const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
 const DEFAULT_PRODUCT_IMAGE_FETCH_TIMEOUT_MS = 8_000;
 const ALLOWED_PRODUCT_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/avif"]);
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost.localdomain"]);
+const MAX_COMPOSITE_PRODUCTS = 3;
+
+const COMPOSITE_CATEGORY_PRIORITY = ["러그", "조명", "수납", "침구", "패브릭", "커튼", "책상/테이블", "거실가구", "소품", "의자"];
+const COMPOSITE_LAYER_ORDER = ["러그", "패브릭", "침구", "커튼", "책상/테이블", "거실가구", "수납", "의자", "소품", "조명"];
+
+function categoryRank(category: string, order: string[]) {
+  const index = order.indexOf(category);
+  return index === -1 ? order.length : index;
+}
+
+export function selectProductReferencesForComposition<T extends ProductReference>(products: T[], maxProducts = MAX_COMPOSITE_PRODUCTS): T[] {
+  const limit = Math.max(1, Math.min(MAX_COMPOSITE_PRODUCTS, maxProducts));
+  const withImages = products.filter((product) => Boolean(product.imageUrl));
+  const picked: T[] = [];
+  const usedCategories = new Set<string>();
+
+  const tryPick = (product: T) => {
+    if (picked.length >= limit) return;
+    if (usedCategories.has(product.category)) return;
+    picked.push(product);
+    usedCategories.add(product.category);
+  };
+
+  for (const category of COMPOSITE_CATEGORY_PRIORITY) {
+    const product = withImages.find((candidate) => candidate.category === category);
+    if (product) tryPick(product);
+    if (picked.length >= limit) break;
+  }
+
+  for (const product of withImages) {
+    tryPick(product);
+    if (picked.length >= limit) break;
+  }
+
+  return picked;
+}
 
 export function getProductCompositionPlacement(category: string): ProductCompositionPlacement {
   switch (category) {
@@ -150,22 +201,9 @@ async function fetchProductImage(product: ProductReference, options: ComposeProd
   return buffer;
 }
 
-export async function composeProductImageOntoRoom(
-  roomImageBytes: Uint8Array,
-  roomMimeType: string,
-  product: ProductReference,
-  options: ComposeProductImageOptions = {},
-): Promise<ProductCompositionResult> {
+async function prepareProductOverlay(product: ProductReference, roomWidth: number, roomHeight: number, options: ComposeProductImageOptions) {
   if (!product.imageUrl) {
     throw new Error("상품 이미지 URL이 필요합니다.");
-  }
-
-  const room = sharp(Buffer.from(roomImageBytes), { failOn: "none" }).rotate();
-  const roomMetadata = await room.metadata();
-  const roomWidth = roomMetadata.width;
-  const roomHeight = roomMetadata.height;
-  if (!roomWidth || !roomHeight) {
-    throw new Error("원본 방 사진 크기를 확인하지 못했습니다.");
   }
 
   const productBuffer = await fetchProductImage(product, options);
@@ -184,11 +222,11 @@ export async function composeProductImageOntoRoom(
 
   const left = clampPosition(roomWidth * placement.leftRatio, productWidth, roomWidth);
   const top = clampPosition(roomHeight * placement.topRatio, productHeight, roomHeight);
-
+  const shadowHeight = Math.max(8, Math.round(productHeight * 0.08));
   const shadow = await sharp({
     create: {
       width: productWidth,
-      height: Math.max(8, Math.round(productHeight * 0.08)),
+      height: shadowHeight,
       channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0.22 },
     },
@@ -197,25 +235,87 @@ export async function composeProductImageOntoRoom(
     .png()
     .toBuffer();
 
-  const output = await room
-    .png()
-    .composite([
-      {
-        input: shadow,
-        left,
-        top: clampPosition(top + productHeight - Math.round(productHeight * 0.04), Math.max(8, Math.round(productHeight * 0.08)), roomHeight),
-        blend: "over",
-      },
-      { input: productPng, left, top, blend: "over" },
-    ])
-    .png()
-    .toBuffer();
+  return {
+    product,
+    placement,
+    productPng,
+    productWidth,
+    productHeight,
+    shadow,
+    left,
+    top,
+    shadowTop: clampPosition(top + productHeight - Math.round(productHeight * 0.04), shadowHeight, roomHeight),
+  };
+}
+
+export async function composeProductsImageOntoRoom(
+  roomImageBytes: Uint8Array,
+  roomMimeType: string,
+  products: ProductReference[],
+  options: ComposeProductImageOptions = {},
+): Promise<MultiProductCompositionResult> {
+  const selectedProducts = selectProductReferencesForComposition(products);
+  if (selectedProducts.length === 0) {
+    throw new Error("상품 이미지 URL이 있는 합성 대상이 필요합니다.");
+  }
+
+  const room = sharp(Buffer.from(roomImageBytes), { failOn: "none" }).rotate();
+  const roomMetadata = await room.metadata();
+  const roomWidth = roomMetadata.width;
+  const roomHeight = roomMetadata.height;
+  if (!roomWidth || !roomHeight) {
+    throw new Error("원본 방 사진 크기를 확인하지 못했습니다.");
+  }
+
+  const roomPng = await room.png().toBuffer();
+  const overlays = await Promise.all(
+    selectedProducts
+      .slice()
+      .sort((a, b) => categoryRank(a.category, COMPOSITE_LAYER_ORDER) - categoryRank(b.category, COMPOSITE_LAYER_ORDER))
+      .map((product) => prepareProductOverlay(product, roomWidth, roomHeight, options)),
+  );
+
+  const compositeInputs = overlays.flatMap((overlay) => [
+    { input: overlay.shadow, left: overlay.left, top: overlay.shadowTop, blend: "over" as const },
+    { input: overlay.productPng, left: overlay.left, top: overlay.top, blend: "over" as const },
+  ]);
+
+  const output = await sharp(roomPng, { failOn: "none" }).composite(compositeInputs).png().toBuffer();
+  const placementOrder = new Map(selectedProducts.map((product, index) => [product.id, index]));
 
   return {
     bytes: Uint8Array.from(output),
     mimeType: "image/png",
-    placement,
     roomSize: { width: roomWidth, height: roomHeight },
-    productSize: { width: productWidth, height: productHeight },
+    placements: overlays
+      .map((overlay) => ({
+        productId: overlay.product.id,
+        productName: overlay.product.name,
+        category: overlay.product.category,
+        placement: overlay.placement,
+        productSize: { width: overlay.productWidth, height: overlay.productHeight },
+      }))
+      .sort((a, b) => (placementOrder.get(a.productId) ?? 0) - (placementOrder.get(b.productId) ?? 0)),
+  };
+}
+
+export async function composeProductImageOntoRoom(
+  roomImageBytes: Uint8Array,
+  roomMimeType: string,
+  product: ProductReference,
+  options: ComposeProductImageOptions = {},
+): Promise<ProductCompositionResult> {
+  const result = await composeProductsImageOntoRoom(roomImageBytes, roomMimeType, [product], options);
+  const first = result.placements[0];
+  if (!first) {
+    throw new Error("상품 이미지 URL이 필요합니다.");
+  }
+
+  return {
+    bytes: result.bytes,
+    mimeType: result.mimeType,
+    placement: first.placement,
+    roomSize: result.roomSize,
+    productSize: first.productSize,
   };
 }

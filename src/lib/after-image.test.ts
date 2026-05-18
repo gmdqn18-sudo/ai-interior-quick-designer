@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAfterImagePrompt, buildProductCompositePrompt, imageDataUrlToBlobParts, normalizeRenderAfterRequest } from "./after-image";
+import { buildAfterImagePrompt, buildMultiProductCompositePrompt, buildProductCompositePrompt, imageDataUrlToBlobParts, normalizeRenderAfterRequest } from "./after-image";
 import type { DesignConcept } from "./interior-design";
 
 const concept: DesignConcept = {
@@ -138,6 +138,7 @@ test("normalizeRenderAfterRequest rejects missing image and keeps valid concept"
     assert.equal(valid.input.concept.id, concept.id);
     assert.equal(valid.input.productReference?.id, "naver-product-1");
     assert.equal(valid.input.productReference?.imageUrl, "https://example.com/rug.jpg");
+    assert.deepEqual(valid.input.productReferences?.map((product) => product.id), ["naver-product-1"]);
   }
 });
 
@@ -157,9 +158,30 @@ test("buildProductCompositePrompt locks the selected product identity for C-opti
     placementLabel: "바닥 중앙",
   });
 
-  assert.match(prompt, /CRITICAL PRODUCT LOCK/);
+  assert.match(prompt, /CRITICAL MULTI-PRODUCT LOCK/);
   assert.match(prompt, /실제 상품 러그/);
-  assert.match(prompt, /Do not alter the product identity, silhouette, color, pattern, proportions/i);
-  assert.match(prompt, /Only harmonize lighting, contact shadow, color temperature/i);
+  assert.match(prompt, /Do not alter any product identity, silhouette, color, pattern, proportions/i);
+  assert.match(prompt, /Only harmonize lighting, contact shadows, color temperature/i);
+  assert.doesNotMatch(prompt, /Recommended items to reflect visually/i);
+});
+
+test("buildMultiProductCompositePrompt locks up to three selected product identities together", () => {
+  const prompt = buildMultiProductCompositePrompt({
+    concept,
+    userPrompt: "러그와 조명, 수납을 같이 확인",
+    keptFurniture: ["책상"],
+    productReferences: [
+      { id: "rug", name: "실제 러그", category: "러그", imageUrl: "https://example.com/rug.jpg", source: "네이버쇼핑", url: "https://example.com/rug" },
+      { id: "lamp", name: "실제 조명", category: "조명", imageUrl: "https://example.com/lamp.jpg", source: "네이버쇼핑", url: "https://example.com/lamp" },
+      { id: "storage", name: "실제 수납장", category: "수납", imageUrl: "https://example.com/storage.jpg", source: "네이버쇼핑", url: "https://example.com/storage" },
+    ],
+    placementLabels: ["바닥 중앙", "우측 코너", "우측 하단"],
+  });
+
+  assert.match(prompt, /CRITICAL MULTI-PRODUCT LOCK/);
+  assert.match(prompt, /실제 러그/);
+  assert.match(prompt, /실제 조명/);
+  assert.match(prompt, /실제 수납장/);
+  assert.match(prompt, /Do not replace any product with a similar item/i);
   assert.doesNotMatch(prompt, /Recommended items to reflect visually/i);
 });
