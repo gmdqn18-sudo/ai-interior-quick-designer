@@ -7,6 +7,7 @@ import {
   hasCategoryKeywordMismatch,
   hasStrongProductExclude,
   productQualityText,
+  productIntrinsicText,
 } from "./product-quality-rules";
 
 export type InteriorPriorityTag =
@@ -203,8 +204,9 @@ function requestedCategorySlots(brief: InteriorPromptBrief): RequestedCategorySl
 }
 
 function productMatchesSlot(product: Product, slot: RequestedCategorySlot) {
-  const text = productQualityText(product);
-  return product.category === slot.id || slot.keywords.some((keyword) => text.includes(keyword));
+  if (product.category === slot.id) return true;
+  const text = productIntrinsicText(product);
+  return slot.keywords.some((keyword) => text.includes(keyword));
 }
 
 function sameProductIdentity(a: Product, b: Product) {

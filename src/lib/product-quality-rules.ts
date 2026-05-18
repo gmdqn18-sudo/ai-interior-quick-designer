@@ -35,7 +35,7 @@ export function productQualityText(product: Product) {
     .join(" ");
 }
 
-function productIntrinsicText(product: Product) {
+export function productIntrinsicText(product: Product) {
   return [product.name, product.rawCategory?.category1, product.rawCategory?.category2, product.rawCategory?.category3, product.rawCategory?.category4].filter(Boolean).join(" ");
 }
 

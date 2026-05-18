@@ -307,6 +307,46 @@ test("buildInteriorDesignPlan keeps requested cafe storage from being filled by 
   assert.ok(storageProducts.every((product) => !/스툴|의자|체어|바스툴/.test(product.name)), firstConcept.map((product) => product.name).join(" / "));
 });
 
+test("buildInteriorDesignPlan does not satisfy a requested rug slot with bedding only because the search query mentioned rug", () => {
+  const liveProduct = (category: string, name: string, price: number, query: string): Product => ({
+    id: `rug-slot-${category}-${name}`.replace(/\s+/g, "-"),
+    externalId: `external-rug-slot-${category}-${name}`,
+    name,
+    category,
+    price,
+    source: "네이버쇼핑",
+    url: `https://smartstore.naver.com/test/products/${encodeURIComponent(name)}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: `${category} live candidate`,
+    provider: "naver-shopping",
+    searchQuery: query,
+    availabilityNote: "가격/재고 변동 가능",
+    mallName: "테스트몰",
+  });
+  const productCandidates: Product[] = [
+    liveProduct("침구", "원룸 사계절 매트리스 커버 침대패드", 24900, "원룸 러그 카페트 우드 베이지"),
+    liveProduct("침구", "원룸 베이지 침구 이불 커버 세트", 70000, "원룸 침구 이불 커버 우드 베이지"),
+    liveProduct("조명", "원룸 우드 무드등 조명", 30000, "원룸 무드등 조명 우드 베이지"),
+    liveProduct("수납", "원룸 라탄 수납 선반 정리대", 80000, "원룸 수납 선반 우드 베이지"),
+    liveProduct("러그", "원룸 베이지 러그 카페트", 60000, "원룸 러그 카페트 우드 베이지"),
+  ];
+
+  const plan = buildInteriorDesignPlan(
+    {
+      budget: 500000,
+      prompt: "월세 원룸을 깔끔하고 따뜻한 우드톤으로 꾸미고 싶습니다. 침구, 조명, 러그, 수납을 예산 안에서 추천해주세요.",
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    },
+    { productCandidates },
+  );
+
+  const categories = plan.concepts[0].products.map((product) => product.category);
+  assert.ok(categories.includes("러그"), plan.concepts[0].products.map((product) => `${product.category}:${product.name}`).join(" / "));
+});
+
 test("buildInteriorDesignPlan gives each primary concept the requested residential rug storage lighting and bedding coverage", () => {
   const liveProduct = (category: string, name: string, price: number, query: string): Product => ({
     id: `room-${category}-${name}`.replace(/\s+/g, "-"),
