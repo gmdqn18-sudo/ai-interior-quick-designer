@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 
 import type { RenderAfterResponse } from "@/lib/after-image";
 import type { DesignGenerationJob, DesignGenerationResponse, RoomAnalysis, RoomAnalysisResponse } from "@/lib/design-api";
@@ -19,6 +19,13 @@ import {
 } from "@/lib/interior-design";
 
 const formatter = new Intl.NumberFormat("ko-KR");
+
+const renderProgressSteps = [
+  "선택한 실제 상품 이미지를 가져오는 중",
+  "상품을 방 사진 위에 1차 배치하는 중",
+  "공간 톤과 색온도를 맞추는 중",
+  "조명과 접지 그림자를 정리하는 중",
+] as const;
 
 function formatWon(amount: number) {
   return `${formatter.format(amount)}원`;
@@ -228,6 +235,7 @@ export default function Home() {
   const [renderedProductIds, setRenderedProductIds] = useState<Record<string, string | null>>({});
   const [afterImageNotice, setAfterImageNotice] = useState("분위기 참고 이미지는 분위기 예시입니다. 실제 구매 판단은 이미지 생성 후 표시되는 상품 카드 기준으로 확인하세요.");
   const [isRenderingAfter, setIsRenderingAfter] = useState(false);
+  const [renderProgressStep, setRenderProgressStep] = useState(0);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -254,12 +262,27 @@ export default function Home() {
   const renderedProduct = selectedConcept.products.find((product) => product.id === renderedProductIds[selectedConcept.id]) ?? null;
   const visibleProductCompositeTarget = generatedAfterImage ? renderedProduct : productCompositeTarget;
   const visibleProductPlacement = visibleProductCompositeTarget ? getProductOverlayPlacement(visibleProductCompositeTarget) : null;
+  const renderPreviewImage = generatedAfterImage || previewUrl;
+  const currentRenderStep = renderProgressSteps[renderProgressStep % renderProgressSteps.length];
   const canShowImageProductMapping = Boolean(generatedAfterImage);
   const mustBuyProducts = selectedConcept.products.slice(0, Math.min(3, selectedConcept.products.length));
   const niceToHaveProducts = selectedConcept.products.slice(mustBuyProducts.length);
   const planCompletionPercent = Math.min(100, Math.round((selectedConcept.usedBudget / Math.max(budget, 1)) * 100));
   const keptFurnitureText = keptFurniture.length > 0 ? keptFurniture.join(" · ") : "큰 가구는 최대한 유지";
   const furnitureOptions = roomAnalysis?.detectedFurniture.length ? roomAnalysis.detectedFurniture : keepOptions;
+
+  useEffect(() => {
+    if (!isRenderingAfter) {
+      setRenderProgressStep(0);
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setRenderProgressStep((current) => (current + 1) % renderProgressSteps.length);
+    }, 3200);
+
+    return () => window.clearInterval(interval);
+  }, [isRenderingAfter]);
 
   const refreshRecentJobs = async () => {
     try {
@@ -416,7 +439,8 @@ export default function Home() {
     }
 
     setIsRenderingAfter(true);
-    setAfterImageNotice("분위기 참고 이미지를 생성하는 중입니다. 보통 20~60초 정도 걸립니다.");
+    setRenderProgressStep(0);
+    setAfterImageNotice("선택한 실제 상품을 방 사진 위에 배치하고 조명·그림자를 맞추는 중입니다. 화면이 멈춘 것이 아니라 상품 합성과 AI 보정이 진행 중입니다.");
 
     try {
       const response = await fetch("/api/render-after", {
@@ -456,7 +480,7 @@ export default function Home() {
           : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있습니다. 상품 후보는 이미지와 별도로 확인하세요.",
       );
     } catch {
-      setAfterImageNotice("분위기 참고 이미지 생성에 실패했습니다. 예산과 프롬프트 기준의 구매 후보 리스트는 계속 확인할 수 있습니다.");
+      setAfterImageNotice("상품 배치/보정 결과를 만들지 못했습니다. 화면은 멈춘 것이 아니며, 구매 후보 리스트는 계속 확인할 수 있습니다. 잠시 뒤 다시 시도해 주세요.");
     } finally {
       setIsRenderingAfter(false);
     }
@@ -890,13 +914,58 @@ export default function Home() {
                 </div>
                 <div className="rounded-[2rem] bg-white/10 p-4">
                   <div className="mb-3 flex items-center justify-between gap-2 text-xs font-black text-slate-300">
-                    <span>수정 후 · {generatedAfterImage ? "분위기 참고 이미지" : "시안 스타일 참고"}</span>
-                    <span>{generatedAfterImage ? "구매 후보 리스트 확인 가능" : "구매 후보 리스트 준비됨"}</span>
+                    <span>수정 후 · {isRenderingAfter ? "상품 합성/보정 중" : generatedAfterImage ? "상품 기반 결과" : "시안 스타일 참고"}</span>
+                    <span>{isRenderingAfter ? "작업 중 화면" : generatedAfterImage ? "구매 후보 리스트 확인 가능" : "구매 후보 리스트 준비됨"}</span>
                   </div>
                   <div className="relative overflow-hidden rounded-[1.5rem] bg-slate-900">
-                    {generatedAfterImage ? (
+                    {isRenderingAfter ? (
+                      <div className="relative h-72 overflow-hidden rounded-[1.5rem] sm:h-96 lg:h-[30rem]">
+                        {renderPreviewImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={renderPreviewImage} alt="상품 합성과 AI 보정이 진행 중인 방 사진" className="h-full w-full scale-105 object-contain opacity-75 blur-md saturate-75" />
+                        ) : (
+                          <div className={`h-full w-full ${selectedConcept.palette} opacity-70 blur-sm`} />
+                        )}
+                        <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" />
+                        <div className="absolute inset-x-4 top-4 rounded-3xl border border-white/15 bg-white/15 p-4 text-white shadow-2xl backdrop-blur-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="relative flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-300/25">
+                              <span className="absolute inline-flex size-9 animate-ping rounded-full bg-amber-200/30" />
+                              <span className="relative size-3 rounded-full bg-amber-200" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-amber-100">선택한 실제 상품이 내 방 사진 안으로 들어가는 중</p>
+                              <p className="mt-1 text-xs font-bold leading-5 text-slate-200">{currentRenderStep}</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 grid gap-2 sm:grid-cols-4">
+                            {renderProgressSteps.map((step, index) => (
+                              <div key={step} className={`rounded-2xl px-3 py-2 text-[11px] font-black leading-4 ${index === renderProgressStep % renderProgressSteps.length ? "bg-amber-200 text-slate-950" : "bg-white/10 text-slate-300"}`}>
+                                {step}
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-3 text-xs font-bold leading-5 text-slate-300">거짓 퍼센트 대신 실제 작업 흐름을 보여줍니다. 완료가 늦어지면 최종 보정본 대신 1차 상품 합성 결과를 먼저 보여드립니다.</p>
+                        </div>
+                        {visibleProductCompositeTarget ? (
+                          <div className="absolute bottom-4 left-4 right-4 rounded-3xl border border-amber-200/30 bg-slate-950/70 p-3 text-white backdrop-blur-xl">
+                            <div className="flex items-center gap-3">
+                              {visibleProductCompositeTarget.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 검증 대상 상품`} className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain" />
+                              ) : null}
+                              <div className="min-w-0">
+                                <p className="text-xs font-black text-amber-100">검증 대상 상품 유지</p>
+                                <p className="truncate text-sm font-black">{visibleProductCompositeTarget.name}</p>
+                                <p className="text-[11px] font-bold text-slate-300">상품 형태·색·비율이 바뀌면 실패입니다.</p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : generatedAfterImage ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={generatedAfterImage} alt={`${selectedConcept.title} 분위기 참고 이미지`} className="h-72 w-full object-contain sm:h-96 lg:h-[30rem]" />
+                      <img src={generatedAfterImage} alt={`${selectedConcept.title} 상품 기반 결과 이미지`} className="h-72 w-full object-contain sm:h-96 lg:h-[30rem]" />
                     ) : (
                       <div className={`relative flex h-72 overflow-hidden rounded-[1.5rem] ${selectedConcept.palette} p-5 text-slate-950 sm:h-96 lg:h-[30rem]`}>
                         <div className="absolute left-8 top-8 h-24 w-36 rounded-3xl bg-white/55 shadow-sm" />
@@ -945,7 +1014,7 @@ export default function Home() {
                     disabled={isRenderingAfter || !roomImageDataUrl}
                     className="mt-3 w-full rounded-2xl bg-[#ff385c] px-4 py-3 text-xs font-black text-white transition hover:-translate-y-0.5 hover:bg-[#e00b41] disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 disabled:hover:translate-y-0"
                   >
-                    {isRenderingAfter ? "분위기 참고 이미지 생성 중..." : generatedAfterImage ? "분위기 참고 이미지 다시 생성" : "분위기 참고 이미지 생성"}
+                    {isRenderingAfter ? "선택 상품 배치와 조명 보정 중..." : generatedAfterImage ? "상품 기반 결과 다시 생성" : "선택 상품 넣어 결과 이미지 만들기"}
                   </button>
                 </div>
               </div>

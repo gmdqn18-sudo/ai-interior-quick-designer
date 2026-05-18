@@ -12,17 +12,17 @@ import {
 import { composeProductImageOntoRoom, type ProductCompositionResult } from "@/lib/product-composition";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2";
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || DEFAULT_OPENAI_IMAGE_MODEL;
 const OPENAI_IMAGE_SIZE = process.env.OPENAI_IMAGE_SIZE || "1536x1024";
-const DEFAULT_OPENAI_IMAGE_TIMEOUT_MS = 50_000;
+const DEFAULT_OPENAI_IMAGE_TIMEOUT_MS = 240_000;
 
 function getOpenAIImageTimeoutMs() {
   const raw = Number.parseInt(process.env.OPENAI_IMAGE_TIMEOUT_MS ?? "", 10);
   if (!Number.isFinite(raw)) return DEFAULT_OPENAI_IMAGE_TIMEOUT_MS;
-  return Math.min(55_000, Math.max(10_000, raw));
+  return Math.min(285_000, Math.max(10_000, raw));
 }
 
 function toImageDataUrl(image: ParsedImageData) {
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
         buildCompositePreviewResponse(
           normalized.input,
           prepared,
-          "OPENAI_API_KEY가 설정되지 않아 AI 보정 없이 1차 상품 합성 이미지를 보여드립니다.",
+          "AI 보정 설정이 아직 준비되지 않아, AI 보정 없이 1차 상품 합성 이미지를 보여드립니다.",
         ),
         { status: 200 },
       );
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
       prompt: prepared.prompt,
       mode: "mock-image-preview",
       provider: "mock",
-      error: "OPENAI_API_KEY가 설정되지 않아 실제 이미지 생성은 건너뛰었습니다.",
+      error: "AI 보정 설정이 아직 준비되지 않아 실제 이미지 보정은 건너뛰었습니다.",
       meta: {
         model: "none",
         conceptId: normalized.input.concept.id,
@@ -193,6 +193,8 @@ export async function POST(request: NextRequest) {
         conceptId: normalized.input.concept.id,
         generatedAt: new Date().toISOString(),
         productReferenceId: normalized.input.productReference?.id,
+        compositionMode: prepared.composition ? "single-product-preset" : undefined,
+        placementLabel: prepared.composition?.placement.label,
         fallbackReason: prepared.fallbackReason,
       },
     };
@@ -200,12 +202,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response);
   } catch (error) {
     if (prepared.composition) {
-      const message = error instanceof Error ? error.message : "AI 보정이 제한 시간 안에 완료되지 않았습니다.";
       return NextResponse.json(
         buildCompositePreviewResponse(
           normalized.input,
           prepared,
-          `AI 보정이 완료되지 않아 1차 상품 합성 이미지를 먼저 보여드립니다. ${message}`,
+          "AI 보정이 오래 걸려 1차 상품 합성 이미지를 먼저 보여드립니다. 상품 위치와 정체성을 먼저 확인해 주세요.",
         ),
         { status: 200 },
       );
