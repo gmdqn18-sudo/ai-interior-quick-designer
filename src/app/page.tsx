@@ -38,6 +38,40 @@ function formatProductPrice(product: Product) {
   return formatWon(product.price);
 }
 
+type RenderResultMode = NonNullable<RenderAfterResponse["mode"]>;
+
+function getRenderResultBadge(mode: RenderResultMode | null, hasImage: boolean) {
+  if (!hasImage) {
+    return {
+      label: "분위기 참고 이미지 · 실제 상품과 다를 수 있음",
+      detail: "아직 실제 상품을 사진에 배치하기 전입니다.",
+      className: "bg-white/90 text-slate-950",
+    };
+  }
+
+  if (mode === "product-composite-edit") {
+    return {
+      label: "최종 AI 보정본",
+      detail: "대표 상품 1개를 먼저 배치한 뒤 조명과 색감을 보정한 결과입니다.",
+      className: "bg-emerald-200 text-emerald-950",
+    };
+  }
+
+  if (mode === "product-composite-preview") {
+    return {
+      label: "1차 상품 합성본 · 최종 보정 전",
+      detail: "상품 위치와 형태를 먼저 확인하는 미리보기입니다.",
+      className: "bg-amber-200 text-slate-950",
+    };
+  }
+
+  return {
+    label: "분위기 참고 이미지 · 실제 상품과 다를 수 있음",
+    detail: "상품 후보와 별도로 만든 스타일 참고용 이미지입니다.",
+    className: "bg-white/90 text-slate-950",
+  };
+}
+
 function buildShoppingListText(concept: DesignConcept, budget: number) {
   const productLines = concept.products
     .map((product, index) => `${index + 1}. ${product.name} / ${formatProductPrice(product)} / ${product.mallName ?? product.source}\n   구매 링크: ${getProductPurchaseUrl(product)}`)
@@ -68,8 +102,8 @@ function buildClientDesignResponse({
     queries: [],
     fetchedAt: createdAt,
     apiCallCount: 0,
-    fallbackReason: "서버 실시간 검색 실패로 브라우저 기본 카탈로그 추천을 사용했습니다.",
-    notice: "실시간 검색 실패로 기본 카탈로그 추천을 사용했습니다. 가격/재고는 외부 쇼핑몰 사정에 따라 변동될 수 있습니다.",
+    fallbackReason: "서버 실시간 검색이 원활하지 않아 브라우저 기본 카탈로그 추천을 사용했습니다.",
+    notice: "실시간 검색이 원활하지 않아 기본 카탈로그 추천을 사용했습니다. 가격/재고는 외부 쇼핑몰 사정에 따라 변동될 수 있습니다.",
   };
   const job = composeDesignGenerationJob(
     { budget, prompt, generation, keptFurniture, roomAnalysis: roomAnalysis ?? null },
@@ -213,7 +247,7 @@ function getConceptDecisionGuide(concept: DesignConcept) {
   }
 
   return {
-    bestFor: "한쪽으로 치우치지 않고 실패 확률을 낮추고 싶을 때",
+    bestFor: "한쪽으로 치우치지 않고 안정적인 선택을 하고 싶을 때",
     impact: "예산 안에서 수납·조명·톤 보정을 균형 있게 정리",
     tradeoff: "가장 강한 한 방보다는 안전한 평균점을 선택합니다.",
     firstAction: "체감 변화가 큰 상위 3개부터 구매",
@@ -232,8 +266,9 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
   const [generatedAfterImages, setGeneratedAfterImages] = useState<Record<string, string>>({});
+  const [generatedAfterModes, setGeneratedAfterModes] = useState<Record<string, RenderResultMode>>({});
   const [renderedProductIds, setRenderedProductIds] = useState<Record<string, string | null>>({});
-  const [afterImageNotice, setAfterImageNotice] = useState("분위기 참고 이미지는 분위기 예시입니다. 실제 구매 판단은 이미지 생성 후 표시되는 상품 카드 기준으로 확인하세요.");
+  const [afterImageNotice, setAfterImageNotice] = useState("결과 이미지는 대표 상품 배치와 스타일을 확인하는 출발점입니다. 실제 구매는 별도 상품 카드의 가격·옵션·사이즈를 확인한 뒤 판단하세요.");
   const [isRenderingAfter, setIsRenderingAfter] = useState(false);
   const [renderProgressStep, setRenderProgressStep] = useState(0);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
@@ -257,6 +292,8 @@ export default function Home() {
   const isPromptReady = prompt.trim().length >= 8;
   const isBudgetTight = selectedConcept.usedBudget > budget;
   const generatedAfterImage = generatedAfterImages[selectedConcept.id];
+  const generatedAfterMode = generatedAfterModes[selectedConcept.id] ?? null;
+  const renderResultBadge = getRenderResultBadge(generatedAfterMode, Boolean(generatedAfterImage));
   const activeProduct = selectedConcept.products.find((product) => product.id === activeProductId) ?? null;
   const productCompositeTarget = (activeProduct?.imageUrl ? activeProduct : selectedConcept.products.find((product) => product.imageUrl)) ?? null;
   const renderedProduct = selectedConcept.products.find((product) => product.id === renderedProductIds[selectedConcept.id]) ?? null;
@@ -313,15 +350,16 @@ export default function Home() {
     setPreviewUrl(URL.createObjectURL(file));
     setRoomImageDataUrl(null);
     setGeneratedAfterImages({});
+    setGeneratedAfterModes({});
     setRenderedProductIds({});
-    setAfterImageNotice("원본 방 사진을 분위기 참고 이미지 생성용으로 준비하는 중입니다...");
+    setAfterImageNotice("원본 방 사진을 대표 상품 배치 결과용으로 준비하는 중입니다...");
     setIsAnalyzing(true);
     setAnalysisNotice("사진을 업로드하는 중입니다. 공간명·채광·생활감은 자동 확정하지 않습니다.");
 
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setRoomImageDataUrl(dataUrl);
-      setAfterImageNotice("방 사진 업로드 완료. 분위기 참고 이미지는 예시이며 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있습니다.");
+      setAfterImageNotice("방 사진 업로드 완료. 대표 상품 1개를 먼저 배치해 보고, 전체 구매 후보는 별도 카드로 확인합니다.");
 
       const formData = new FormData();
       formData.append("roomImage", file);
@@ -346,7 +384,7 @@ export default function Home() {
       setApiNoticeTone("neutral");
     } catch {
       setRoomAnalysis(null);
-      setAnalysisNotice("사진 업로드 확인에 실패했습니다. 시안 생성은 텍스트 조건만으로 계속할 수 있습니다.");
+      setAnalysisNotice("사진 업로드 확인이 원활하지 않습니다. 시안 생성은 텍스트 조건만으로 계속할 수 있습니다.");
       setAfterImageNotice((current) =>
         current.includes("준비 완료") ? current : "이미지 파일을 읽지 못했습니다. 방 사진을 다시 올려주세요.",
       );
@@ -375,7 +413,7 @@ export default function Home() {
     setCopyStatus("쇼핑 리스트 복사");
     setApiNotice("예산과 프롬프트 기준으로 구매 후보 리스트를 준비하는 중입니다...");
     setApiNoticeTone("neutral");
-    setAfterImageNotice(roomImageDataUrl ? "예산과 프롬프트 기준의 구매 후보를 준비했습니다. 분위기 참고 이미지를 생성한 뒤 별도 상품 리스트를 확인할 수 있습니다." : "분위기 참고 이미지를 만들려면 먼저 방 사진을 업로드해 주세요. 실제 구매 판단은 상품 카드 기준입니다.");
+    setAfterImageNotice(roomImageDataUrl ? "예산과 프롬프트 기준의 구매 후보를 준비했습니다. 대표 상품 배치 결과를 만든 뒤 별도 구매 후보 리스트를 확인할 수 있습니다." : "대표 상품 배치 결과를 만들려면 먼저 방 사진을 업로드해 주세요. 실제 구매 판단은 상품 카드 기준입니다.");
 
     try {
       const response = await fetch("/api/designs", {
@@ -434,7 +472,7 @@ export default function Home() {
 
   const renderAfterImage = async () => {
     if (!roomImageDataUrl) {
-      setAfterImageNotice("분위기 참고 이미지를 만들려면 먼저 방 사진을 업로드해 주세요.");
+      setAfterImageNotice("대표 상품 배치 결과를 만들려면 먼저 방 사진을 업로드해 주세요.");
       return;
     }
 
@@ -466,18 +504,19 @@ export default function Home() {
       const data = (await response.json().catch(() => ({}))) as Partial<RenderAfterResponse> & { error?: string };
 
       if (!response.ok || !data.imageUrl) {
-        throw new Error(data.error ?? "이미지 생성 API 호출이 실패했습니다.");
+        throw new Error(data.error ?? "이미지 생성 API 호출이 완료되지 않았습니다.");
       }
 
       const isProductCompositeResult = data.mode === "product-composite-edit" || data.mode === "product-composite-preview";
       setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
+      setGeneratedAfterModes((current) => ({ ...current, [selectedConcept.id]: data.mode ?? "mock-image-preview" }));
       setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: isProductCompositeResult ? productCompositeTarget?.id ?? null : null }));
       setAfterImageNotice(
         data.mode === "product-composite-edit"
-          ? "선택 상품 이미지 1개를 원본 사진 위에 먼저 올린 뒤 조명·그림자·색감을 보정했습니다. 상품 정체성은 원본 썸네일과 비교해 검수하세요."
+          ? "선택 상품 이미지 1개를 원본 사진 위에 먼저 올린 뒤 조명·그림자·색감을 보정했습니다. 상품 썸네일과 결과 이미지를 함께 비교해 주세요."
           : data.mode === "product-composite-preview"
-            ? "AI 보정이 제한 시간 안에 끝나지 않아, 선택 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 정체성 검수용입니다."
-          : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있습니다. 상품 후보는 이미지와 별도로 확인하세요.",
+            ? "AI 보정이 제한 시간 안에 끝나지 않아, 선택 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 형태 확인용입니다."
+          : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있으니, 별도 구매 후보 카드에서 상품 정보를 확인하세요.",
       );
     } catch {
       setAfterImageNotice("상품 배치/보정 결과를 만들지 못했습니다. 화면은 멈춘 것이 아니며, 구매 후보 리스트는 계속 확인할 수 있습니다. 잠시 뒤 다시 시도해 주세요.");
@@ -767,7 +806,7 @@ export default function Home() {
                   <p className="text-sm font-black text-[#ff385c]">STEP 2</p>
                   <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] sm:text-3xl">구매 방향을 선택하세요</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    가성비 우선, 균형, 분위기 우선 중 하나를 고르면 예산 배분과 상품 구성이 달라집니다. 마음에 드는 방향을 고른 뒤 분위기 참고 이미지를 생성하고, 실제 구매 후보를 확인하세요.
+                    가성비 우선, 균형, 분위기 우선 중 하나를 고르면 예산 배분과 상품 구성이 달라집니다. 마음에 드는 방향을 고른 뒤 대표 상품 배치 결과와 별도 구매 후보를 확인하세요.
                   </p>
                 </div>
                 <div className="rounded-full bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800">유지: {keptFurniture.join(", ") || "직접 선택 없음"}</div>
@@ -861,7 +900,7 @@ export default function Home() {
                 <div>
                   <h2 className="text-2xl font-black tracking-[-0.03em] sm:text-3xl">예산 안에서 이 방 완성하기</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
-                    먼저 시안 방향을 고르고 분위기 참고 이미지를 생성하세요. 이미지는 분위기 예시이며, 실제 구매 판단은 이미지 생성 후 표시되는 상품 카드 기준입니다.
+                    먼저 시안 방향을 고르면 대표 상품 1개를 방 사진에 배치해 봅니다. 전체 상품 리스트는 이미지와 별도로 확인하는 구매 후보입니다.
                   </p>
                 </div>
                 <button
@@ -890,12 +929,12 @@ export default function Home() {
                 <div className="rounded-3xl bg-white/10 p-4">
                   <div className="text-xs font-black text-amber-200">바꿀 것</div>
                   <p className="mt-2 text-sm font-bold leading-6 text-white">{selectedConcept.products.slice(0, 3).map((product) => product.category).join(" · ")}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">구매 후보 카테고리와 요청한 분위기를 중심으로 참고 이미지를 만듭니다.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">구매 후보 중 대표 상품을 먼저 사진에 배치하고, 나머지 후보는 별도 카드로 확인합니다.</p>
                 </div>
                 <div className="rounded-3xl bg-white/10 p-4">
                   <div className="text-xs font-black text-amber-200">확인 순서</div>
-                  <p className="mt-2 text-sm font-bold leading-6 text-white">분위기 참고 이미지 확인 후 상품 카드 열람</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">이미지는 분위기 참고용이고 실제 구매는 카드 기준입니다.</p>
+                  <p className="mt-2 text-sm font-bold leading-6 text-white">대표 상품 배치 결과 확인 후 별도 구매 후보 검토</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">결과 이미지는 구매 판단의 출발점이고, 실제 구매는 각 상품 카드의 가격·옵션·사이즈를 확인한 뒤 진행합니다.</p>
                 </div>
               </div>
 
@@ -945,29 +984,39 @@ export default function Home() {
                               </div>
                             ))}
                           </div>
-                          <p className="mt-3 text-xs font-bold leading-5 text-slate-300">거짓 퍼센트 대신 실제 작업 흐름을 보여줍니다. 완료가 늦어지면 최종 보정본 대신 1차 상품 합성 결과를 먼저 보여드립니다.</p>
+                          <p className="mt-3 text-xs font-bold leading-5 text-slate-300">전체 구매 후보가 모두 이미지에 들어가는 것은 아니며, 대표 상품 1개를 먼저 배치해 확인합니다. 완료가 늦어지면 1차 상품 합성 결과를 먼저 보여드립니다.</p>
                         </div>
                         {visibleProductCompositeTarget ? (
                           <div className="absolute bottom-4 left-4 right-4 rounded-3xl border border-amber-200/30 bg-slate-950/70 p-3 text-white backdrop-blur-xl">
                             <div className="flex items-center gap-3">
                               {visibleProductCompositeTarget.imageUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 검증 대상 상품`} className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain" />
+                                <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 대표 상품`} className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain" />
                               ) : null}
                               <div className="min-w-0">
-                                <p className="text-xs font-black text-amber-100">검증 대상 상품 유지</p>
+                                <p className="text-xs font-black text-amber-100">이번 이미지에 먼저 배치하는 상품</p>
                                 <p className="truncate text-sm font-black">{visibleProductCompositeTarget.name}</p>
-                                <p className="text-[11px] font-bold text-slate-300">상품 형태·색·비율이 바뀌면 실패입니다.</p>
+                                <p className="text-[11px] font-bold text-slate-300">결과 이미지와 아래 썸네일을 함께 비교해 주세요.</p>
                               </div>
                             </div>
                           </div>
                         ) : null}
                       </div>
                     ) : generatedAfterImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={generatedAfterImage} alt={`${selectedConcept.title} 상품 기반 결과 이미지`} className="h-72 w-full object-contain sm:h-96 lg:h-[30rem]" />
+                      <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={generatedAfterImage} alt={`${selectedConcept.title} 상품 기반 결과 이미지`} className="h-72 w-full object-contain sm:h-96 lg:h-[30rem]" />
+                        <div className="absolute left-4 top-4 max-w-[calc(100%-2rem)] rounded-2xl border border-white/30 bg-slate-950/70 p-3 text-white shadow-xl backdrop-blur-xl">
+                          <div className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${renderResultBadge.className}`}>{renderResultBadge.label}</div>
+                          <p className="mt-2 text-xs font-bold leading-5 text-slate-200">{renderResultBadge.detail}</p>
+                        </div>
+                      </div>
                     ) : (
                       <div className={`relative flex h-72 overflow-hidden rounded-[1.5rem] ${selectedConcept.palette} p-5 text-slate-950 sm:h-96 lg:h-[30rem]`}>
+                        <div className="absolute left-4 top-4 z-10 max-w-[calc(100%-2rem)] rounded-2xl border border-black/10 bg-white/85 p-3 shadow-sm backdrop-blur">
+                          <div className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${renderResultBadge.className}`}>{renderResultBadge.label}</div>
+                          <p className="mt-2 text-xs font-bold leading-5 text-slate-600">{renderResultBadge.detail}</p>
+                        </div>
                         <div className="absolute left-8 top-8 h-24 w-36 rounded-3xl bg-white/55 shadow-sm" />
                         <div className="absolute right-8 top-12 h-36 w-24 rounded-3xl bg-white/45 shadow-sm" />
                         <div className="absolute bottom-10 left-1/2 h-20 w-56 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
@@ -985,24 +1034,32 @@ export default function Home() {
                     )}
                   </div>
                   {visibleProductCompositeTarget ? (
-                    <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-200">
-                      <div className="flex items-center gap-3">
+                    <div className="mt-3 rounded-3xl border border-amber-200/30 bg-white/10 p-4 text-xs font-bold leading-5 text-slate-200">
+                      <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                        <div>
+                          <p className="text-sm font-black text-amber-100">이번 이미지에 사용한 상품</p>
+                          <p className="mt-1 text-slate-300">전체 구매 후보 중 대표 상품 1개를 먼저 방 사진에 배치했습니다.</p>
+                        </div>
+                        <span className="rounded-full bg-amber-200 px-3 py-1 text-[11px] font-black text-slate-950">대표 상품 1개</span>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-2xl bg-slate-950/35 p-3">
                         {visibleProductCompositeTarget.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 상품 이미지`} className="h-14 w-14 shrink-0 rounded-xl bg-white object-contain" />
+                          <img src={visibleProductCompositeTarget.imageUrl} alt={`${visibleProductCompositeTarget.name} 상품 이미지`} className="h-16 w-16 shrink-0 rounded-xl bg-white object-contain" />
                         ) : null}
                         <div className="min-w-0">
-                          <p className="text-amber-100">{generatedAfterImage ? "C안 1상품 결과 검증 대상" : "C안 1상품 검증 예정"}: {visibleProductPlacement?.label ?? "단순 프리셋 영역"}</p>
-                          <p className="truncate text-slate-300">{visibleProductCompositeTarget.name} · {formatWon(visibleProductCompositeTarget.price)}</p>
-                          <p className="text-slate-400">{generatedAfterImage ? "이번 결과 이미지에 사용된 상품 썸네일입니다. 정체성 유지 여부를 비교하세요." : "이미지 생성 시 이 상품을 먼저 방 사진 위에 올려본 뒤 보정합니다."}</p>
+                          <p className="text-amber-100">이미지 속 반영 위치: {visibleProductPlacement?.label ?? "대표 배치 영역"}</p>
+                          <p className="truncate text-sm font-black text-white">{visibleProductCompositeTarget.name}</p>
+                          <p className="text-slate-300">{formatProductPrice(visibleProductCompositeTarget)} · {visibleProductCompositeTarget.mallName ?? visibleProductCompositeTarget.source}</p>
+                          <p className="text-slate-400">결과 이미지와 상품 썸네일을 함께 보고 형태·색감이 구매 기대와 맞는지 확인하세요.</p>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-300">
                       {generatedAfterImage
-                        ? "이번 결과는 C안 상품 합성이 아니라 기존 분위기 참고 이미지로 생성되었습니다."
-                        : "이미지 URL이 있는 상품이 없어 C안 합성 대신 기존 분위기 참고 이미지로 진행합니다."}
+                        ? "이번 결과는 대표 상품 합성이 아니라 분위기 참고 이미지로 생성되었습니다. 아래 구매 후보와 별도로 확인하세요."
+                        : "이미지 URL이 있는 대표 상품이 없어 상품 배치 대신 분위기 참고 이미지로 진행합니다."}
                     </div>
                   )}
                   <div className="mt-3 rounded-2xl bg-white/10 p-3 text-xs font-bold leading-5 text-slate-300">
@@ -1023,12 +1080,12 @@ export default function Home() {
                 <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                   <div>
                     <h3 className="text-sm font-black text-amber-200">
-                      {canShowImageProductMapping ? "예산 기준 구매 후보 리스트" : "분위기 참고 이미지 생성 후 별도 상품 리스트 확인"}
+                      {canShowImageProductMapping ? "이 방을 완성하기 위한 별도 구매 후보" : "결과 이미지 생성 후 별도 구매 후보 확인"}
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
                       {canShowImageProductMapping
-                        ? "아래 상품 리스트는 이미지 속 물건과 1:1 일치하지 않습니다. 실제 구매 판단은 상품 카드 기준이며, 상품 후보는 이미지와 별도로 확인하세요."
-                        : "아직 분위기 참고 이미지가 생성되지 않았습니다. 예산과 프롬프트 기준의 구매 후보를 준비했으며, 이미지 생성 후 별도 상품 리스트로 확인할 수 있습니다."}
+                        ? "결과 이미지는 대표 상품 1개를 먼저 배치한 참고 결과입니다. 아래 목록은 예산과 요청 조건을 기준으로 따로 확인해야 할 구매 후보입니다."
+                        : "예산과 프롬프트 기준의 구매 후보를 준비했습니다. 이미지 생성 후 대표 상품과 전체 구매 후보를 분리해서 확인할 수 있습니다."}
                     </p>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">총 {selectedConcept.products.length}개 · {formatWon(selectedConcept.usedBudget)}</span>
@@ -1036,30 +1093,29 @@ export default function Home() {
                 {canShowImageProductMapping ? (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {selectedConcept.products.map((product, index) => (
-                      <a
+                      <button
                         key={`used-${product.id}`}
-                        href={getProductPurchaseUrl(product)}
-                        target="_blank"
-                        rel="noreferrer"
+                        type="button"
                         onMouseEnter={() => setActiveProductId(product.id)}
                         onFocus={() => setActiveProductId(product.id)}
                         onClick={() => setActiveProductId(product.id)}
-                        className={`group rounded-2xl bg-white p-3 text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
+                        className={`group rounded-2xl bg-white p-3 text-left text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
                       >
                         <div className="flex items-start gap-2">
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>
                           <div className="min-w-0">
                             <div className="truncate text-xs font-black">{product.name}</div>
-                            <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} 바로 열기 · {formatProductPrice(product)}</div>
+                            <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} · {formatProductPrice(product)}</div>
                             <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">구매 참고 위치: {getProductPlacement(product)}</div>
+                            <div className="mt-1 text-[11px] font-bold text-slate-400">상세 카드에서 구매처와 확인 사항 보기</div>
                           </div>
                         </div>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 ) : (
                   <div className="mt-3 rounded-2xl border border-dashed border-amber-300/50 bg-slate-950/20 p-4 text-center text-xs font-bold leading-5 text-slate-300">
-                    먼저 위의 “분위기 참고 이미지 생성” 버튼을 눌러 이미지 결과를 확인한 뒤, 예산과 프롬프트 기준의 별도 구매 후보 리스트를 확인하세요.
+                    먼저 위의 “선택 상품 넣어 결과 이미지 만들기” 버튼을 눌러 대표 상품 배치 결과를 확인한 뒤, 예산과 프롬프트 기준의 별도 구매 후보 리스트를 확인하세요.
                   </div>
                 )}
               </div>
@@ -1068,8 +1124,8 @@ export default function Home() {
               <div className="mt-5 space-y-4">
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-black text-amber-200">먼저 확인할 구매 후보</h3>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">이미지 확인 후 노출</span>
+                    <h3 className="text-sm font-black text-amber-200">먼저 확인할 별도 구매 후보</h3>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">구매 전 확인 필요</span>
                   </div>
                   <div className="space-y-3">
                     {mustBuyProducts.map((product, index) => {
@@ -1104,6 +1160,9 @@ export default function Home() {
                             </div>
                             <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
                               <span className="font-black">{formatProductPrice(product)}</span>
+                              <div className="max-w-56 rounded-2xl bg-slate-100 p-3 text-[11px] font-bold leading-5 text-slate-600">
+                                구매 전 옵션가·배송비·재고, 사이즈, 실제 색상/재질을 상품 상세페이지에서 확인하세요.
+                              </div>
                               <a href={purchaseUrl} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white">
                                 {product.source}에서 열기
                               </a>
@@ -1154,6 +1213,9 @@ export default function Home() {
                               </div>
                               <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
                                 <span className="font-black">{formatProductPrice(product)}</span>
+                                <div className="max-w-56 rounded-2xl bg-slate-100 p-3 text-[11px] font-bold leading-5 text-slate-600">
+                                  구매 전 옵션가·배송비·재고, 사이즈, 실제 색상/재질을 상품 상세페이지에서 확인하세요.
+                                </div>
                                 <a href={purchaseUrl} target="_blank" rel="noreferrer" className="rounded-full bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white">
                                   {product.source}에서 열기
                                 </a>
@@ -1171,7 +1233,7 @@ export default function Home() {
               </div>
               ) : (
                 <div className="mt-5 rounded-3xl border border-dashed border-slate-500/60 bg-white/10 p-5 text-center text-sm font-bold leading-6 text-slate-300">
-                  예산과 프롬프트 기준의 구매 후보를 준비했습니다. 분위기 참고 이미지를 생성한 뒤 별도 상품 리스트와 링크를 확인할 수 있습니다.
+                  예산과 프롬프트 기준의 구매 후보를 준비했습니다. 대표 상품 배치 결과를 만든 뒤 별도 상품 리스트와 링크를 확인할 수 있습니다.
                 </div>
               )}
             </div>
