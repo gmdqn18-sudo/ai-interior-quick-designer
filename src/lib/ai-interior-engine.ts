@@ -197,7 +197,7 @@ function requestedCategorySlots(brief: InteriorPromptBrief): RequestedCategorySl
   if (hasAny(prompt, ["수납", "선반", "서랍", "책장", "정리대", "캐비닛", "장식장"])) add("수납", CATEGORY_POSITIVE_KEYWORDS.수납);
   if (hasAny(prompt, ["조명", "무드등", "펜던트", "스탠드", "램프", "벽등"])) add("조명", CATEGORY_POSITIVE_KEYWORDS.조명);
   if (hasAny(prompt, ["침구", "이불", "베개", "커버", "매트리스", "패드"])) add("침구", CATEGORY_POSITIVE_KEYWORDS.침구);
-  if (hasAny(prompt, ["러그", "카페트", "매트"])) add("러그", CATEGORY_POSITIVE_KEYWORDS.러그);
+  if (hasAny(prompt, ["러그", "카페트", "매트"])) add("러그", ["러그", "카페트"]);
   if (hasAny(prompt, ["커튼", "블라인드"])) add("커튼", CATEGORY_POSITIVE_KEYWORDS.커튼);
 
   return slots;
