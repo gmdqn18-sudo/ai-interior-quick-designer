@@ -17,6 +17,17 @@ export const maxDuration = 60;
 const DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2";
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || DEFAULT_OPENAI_IMAGE_MODEL;
 const OPENAI_IMAGE_SIZE = process.env.OPENAI_IMAGE_SIZE || "1536x1024";
+const DEFAULT_OPENAI_IMAGE_TIMEOUT_MS = 50_000;
+
+function getOpenAIImageTimeoutMs() {
+  const raw = Number.parseInt(process.env.OPENAI_IMAGE_TIMEOUT_MS ?? "", 10);
+  if (!Number.isFinite(raw)) return DEFAULT_OPENAI_IMAGE_TIMEOUT_MS;
+  return Math.min(55_000, Math.max(10_000, raw));
+}
+
+function toImageDataUrl(image: ParsedImageData) {
+  return `data:${image.mimeType};base64,${Buffer.from(image.bytes).toString("base64")}`;
+}
 
 async function callOpenAIImageEdit(input: { image: ParsedImageData; prompt: string }) {
   const imageBytes = input.image.bytes;
@@ -31,13 +42,17 @@ async function callOpenAIImageEdit(input: { image: ParsedImageData; prompt: stri
   formData.append("size", OPENAI_IMAGE_SIZE);
   formData.append("image", new Blob([imageArrayBuffer], { type: input.image.mimeType }), "room.png");
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getOpenAIImageTimeoutMs());
+
   const response = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
     body: formData,
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
 
   const data = (await response.json().catch(() => ({}))) as {
     data?: Array<{ b64_json?: string; url?: string }>;
@@ -56,6 +71,34 @@ async function callOpenAIImageEdit(input: { image: ParsedImageData; prompt: stri
   }
 
   return { imageUrl, prompt: input.prompt };
+}
+
+function buildCompositePreviewResponse(
+  input: RenderAfterInput,
+  prepared: {
+    image: ParsedImageData;
+    prompt: string;
+    composition?: ProductCompositionResult;
+    fallbackReason?: string;
+  },
+  error: string,
+): RenderAfterResponse {
+  return {
+    imageUrl: toImageDataUrl(prepared.image),
+    prompt: prepared.prompt,
+    mode: "product-composite-preview",
+    provider: "server-composite",
+    error,
+    meta: {
+      model: "server-composite",
+      conceptId: input.concept.id,
+      generatedAt: new Date().toISOString(),
+      productReferenceId: input.productReference?.id,
+      compositionMode: prepared.composition ? "single-product-preset" : undefined,
+      placementLabel: prepared.composition?.placement.label,
+      fallbackReason: prepared.fallbackReason,
+    },
+  };
 }
 
 async function prepareRenderInput(input: RenderAfterInput): Promise<{
@@ -110,6 +153,17 @@ export async function POST(request: NextRequest) {
   const prepared = await prepareRenderInput(normalized.input);
 
   if (!process.env.OPENAI_API_KEY) {
+    if (prepared.composition) {
+      return NextResponse.json(
+        buildCompositePreviewResponse(
+          normalized.input,
+          prepared,
+          "OPENAI_API_KEY가 설정되지 않아 AI 보정 없이 1차 상품 합성 이미지를 보여드립니다.",
+        ),
+        { status: 200 },
+      );
+    }
+
     const response: RenderAfterResponse = {
       imageUrl: null,
       prompt: prepared.prompt,
@@ -121,8 +175,6 @@ export async function POST(request: NextRequest) {
         conceptId: normalized.input.concept.id,
         generatedAt: new Date().toISOString(),
         productReferenceId: normalized.input.productReference?.id,
-        compositionMode: prepared.composition ? "single-product-preset" : undefined,
-        placementLabel: prepared.composition?.placement.label,
         fallbackReason: prepared.fallbackReason,
       },
     };
@@ -141,14 +193,24 @@ export async function POST(request: NextRequest) {
         conceptId: normalized.input.concept.id,
         generatedAt: new Date().toISOString(),
         productReferenceId: normalized.input.productReference?.id,
-        compositionMode: prepared.composition ? "single-product-preset" : undefined,
-        placementLabel: prepared.composition?.placement.label,
         fallbackReason: prepared.fallbackReason,
       },
     };
 
     return NextResponse.json(response);
   } catch (error) {
+    if (prepared.composition) {
+      const message = error instanceof Error ? error.message : "AI 보정이 제한 시간 안에 완료되지 않았습니다.";
+      return NextResponse.json(
+        buildCompositePreviewResponse(
+          normalized.input,
+          prepared,
+          `AI 보정이 완료되지 않아 1차 상품 합성 이미지를 먼저 보여드립니다. ${message}`,
+        ),
+        { status: 200 },
+      );
+    }
+
     const response: RenderAfterResponse = {
       imageUrl: null,
       prompt: prepared.prompt,
@@ -160,8 +222,6 @@ export async function POST(request: NextRequest) {
         conceptId: normalized.input.concept.id,
         generatedAt: new Date().toISOString(),
         productReferenceId: normalized.input.productReference?.id,
-        compositionMode: prepared.composition ? "single-product-preset" : undefined,
-        placementLabel: prepared.composition?.placement.label,
         fallbackReason: prepared.fallbackReason,
       },
     };

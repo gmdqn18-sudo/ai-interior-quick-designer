@@ -1,7 +1,7 @@
 import type { DesignConcept } from "./interior-design";
 import type { ProductReference } from "./product-composition";
 
-export type RenderAfterImageMode = "openai-image-edit" | "product-composite-edit" | "mock-image-preview";
+export type RenderAfterImageMode = "openai-image-edit" | "product-composite-edit" | "product-composite-preview" | "mock-image-preview";
 
 export type RenderAfterRequest = {
   imageDataUrl?: unknown;
@@ -28,7 +28,7 @@ export type RenderAfterResponse = {
   imageUrl: string | null;
   prompt: string;
   mode: RenderAfterImageMode;
-  provider: "openai" | "mock";
+  provider: "openai" | "server-composite" | "mock";
   error?: string;
   meta: {
     model: string;

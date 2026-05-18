@@ -445,11 +445,14 @@ export default function Home() {
         throw new Error(data.error ?? "이미지 생성 API 호출이 실패했습니다.");
       }
 
+      const isProductCompositeResult = data.mode === "product-composite-edit" || data.mode === "product-composite-preview";
       setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
-      setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: data.mode === "product-composite-edit" ? productCompositeTarget?.id ?? null : null }));
+      setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: isProductCompositeResult ? productCompositeTarget?.id ?? null : null }));
       setAfterImageNotice(
         data.mode === "product-composite-edit"
           ? "선택 상품 이미지 1개를 원본 사진 위에 먼저 올린 뒤 조명·그림자·색감을 보정했습니다. 상품 정체성은 원본 썸네일과 비교해 검수하세요."
+          : data.mode === "product-composite-preview"
+            ? "AI 보정이 제한 시간 안에 끝나지 않아, 선택 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 정체성 검수용입니다."
           : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있습니다. 상품 후보는 이미지와 별도로 확인하세요.",
       );
     } catch {

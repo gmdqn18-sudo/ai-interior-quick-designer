@@ -28,9 +28,11 @@ export type ProductCompositionResult = {
 export type ComposeProductImageOptions = {
   fetchImpl?: typeof fetch;
   maxProductImageBytes?: number;
+  productImageFetchTimeoutMs?: number;
 };
 
 const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+const DEFAULT_PRODUCT_IMAGE_FETCH_TIMEOUT_MS = 8_000;
 const ALLOWED_PRODUCT_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/avif"]);
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost.localdomain"]);
 
@@ -122,9 +124,14 @@ async function assertSafeProductImageUrl(imageUrl: string, skipDnsLookup: boolea
 async function fetchProductImage(product: ProductReference, options: ComposeProductImageOptions) {
   await assertSafeProductImageUrl(product.imageUrl, Boolean(options.fetchImpl));
 
+  const controller = new AbortController();
+  const timeoutMs = Math.min(15_000, Math.max(2_000, options.productImageFetchTimeoutMs ?? DEFAULT_PRODUCT_IMAGE_FETCH_TIMEOUT_MS));
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   const response = await (options.fetchImpl ?? fetch)(product.imageUrl, {
     headers: { Accept: "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.8" },
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
 
   if (!response.ok) {
     throw new Error(`상품 이미지를 가져오지 못했습니다. (${response.status})`);
