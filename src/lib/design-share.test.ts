@@ -37,13 +37,13 @@ const job: DesignGenerationJob = {
   concepts: [
     {
       id: "concept-a",
-      title: "방 분석 맞춤 균형 시안",
+      title: "입력 조건 맞춤 균형 시안",
       strategy: "예산 안에서 체감 변화가 큰 품목을 조합합니다.",
       usedBudget: 84800,
       budgetFitScore: 98,
       feasibilityScore: 96,
       roomStructureScore: 97,
-      highlights: ["방 분석 결과 반영", "무타공·저시공 중심"],
+      highlights: ["입력 조건 기준", "무타공·저시공 중심"],
       palette: "bg-gradient-to-br from-amber-100 via-stone-100 to-orange-200",
       products: [
         {
@@ -87,12 +87,12 @@ test("buildDesignShareUrl returns a user-facing result page path", () => {
   assert.equal(buildDesignShareUrl("https://example.com", "job_abc"), "https://example.com/designs/job_abc");
 });
 
-test("buildDesignShareSummary highlights budget, analysis, and selected product categories", () => {
+test("buildDesignShareSummary highlights budget, input context, and selected product categories", () => {
   const summary = buildDesignShareSummary(job);
 
-  assert.equal(summary.heroTitle, "방 분석 맞춤 균형 시안");
+  assert.equal(summary.heroTitle, "입력 조건 맞춤 균형 시안");
   assert.equal(summary.usedBudgetLabel, "84,800원");
-  assert.equal(summary.roomAnalysisLabel, "원룸 · 채광 낮음 · 생활감 높음");
+  assert.equal(summary.roomAnalysisLabel, "사진 업로드 정보 있음 · 프롬프트 기준으로 구성");
   assert.equal(summary.executionChecklist[0], "SKÅDIS 스코디스 페그보드 화이트 구매 후보 확인");
   assert.deepEqual(summary.productCategories, ["수납", "조명"]);
 });
@@ -100,7 +100,8 @@ test("buildDesignShareSummary highlights budget, analysis, and selected product 
 test("buildShoppingListShareText creates copy-ready Korean share text with product-detail links", () => {
   const text = buildShoppingListShareText(job, "https://example.com/designs/job_sharetest");
 
-  assert.match(text, /\[RoomFit AI\] 방 분석 맞춤 균형 시안/);
+  assert.match(text, /\[RoomFit AI\] 입력 조건 맞춤 균형 시안/);
+  assert.match(text, /사진 업로드 정보: 사진을 참고 자료로 등록함 \/ 구매 후보는 프롬프트 기준/);
   assert.match(text, /공유 링크: https:\/\/example.com\/designs\/job_sharetest/);
   assert.match(text, /1\. SKÅDIS 스코디스 페그보드 화이트 - 22,900원 - 이케아/);
   assert.match(text, /구매 링크: https:\/\/www\.ikea\.com\/kr\/ko\/p\/skadis-pegboard-white-30320806\//);

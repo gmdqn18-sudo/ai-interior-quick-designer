@@ -22,7 +22,7 @@ const baseAnalysis: RoomAnalysis = {
   confidenceScore: 88,
 };
 
-test("buildInteriorDesignPlan merges user intent, kept furniture, and room analysis into a prompt brief", () => {
+test("buildInteriorDesignPlan keeps mock room analysis from overriding user prompt", () => {
   const plan = buildInteriorDesignPlan({
     budget: 300000,
     prompt: "우드톤 자취방",
@@ -31,11 +31,11 @@ test("buildInteriorDesignPlan merges user intent, kept furniture, and room analy
     roomAnalysis: baseAnalysis,
   });
 
-  assert.equal(plan.promptBrief.roomType, "원룸");
+  assert.equal(plan.promptBrief.roomType, "미분석");
   assert.match(plan.promptBrief.normalizedPrompt, /우드톤 자취방/);
-  assert.match(plan.promptBrief.normalizedPrompt, /수납 중심/);
+  assert.doesNotMatch(plan.promptBrief.normalizedPrompt, /수납 중심/);
   assert.match(plan.promptBrief.normalizedPrompt, /기존 책상 유지/);
-  assert.deepEqual(plan.promptBrief.priorityTags.slice(0, 3), ["storage", "lighting", "renter-safe"]);
+  assert.ok(plan.promptBrief.priorityTags.includes("workstation"));
 });
 
 test("buildInteriorDesignPlan prioritizes storage and lighting products while staying under budget", () => {
@@ -53,7 +53,7 @@ test("buildInteriorDesignPlan prioritizes storage and lighting products while st
   assert.ok(plan.concepts.every((concept) => concept.usedBudget <= 150000));
   assert.ok(allProducts.some((product) => product.category === "수납"));
   assert.ok(allProducts.some((product) => product.category === "조명"));
-  assert.ok(plan.concepts[0].highlights.some((highlight) => highlight.includes("방 분석")));
+  assert.ok(plan.concepts.every((concept) => !concept.highlights.some((highlight) => highlight.includes("방 분석"))));
 });
 
 test("buildInteriorDesignPlan scales recommendations toward a premium budget while staying under budget", () => {
@@ -157,54 +157,28 @@ test("buildInteriorDesignPlan changes product mix for a cozy Ghibli living-room 
   assert.ok(overlap <= 7, `expected prompt-specific product mix, got ${overlap} overlapping products`);
 });
 
-test("buildInteriorDesignPlan changes Step 2 options when room analysis changes", () => {
-  const brightLivingAnalysis: RoomAnalysis = {
-    ...baseAnalysis,
-    id: "analysis_bright_living",
-    roomType: "거실",
-    lightLevel: "좋음",
-    clutterLevel: "낮음",
-    dominantTones: ["쿨 화이트", "블랙", "실버"],
-    detectedFurniture: ["소파", "커튼", "조명"],
-    opportunities: ["기존 정돈감을 유지하면서 러그와 식물로 포인트 추가"],
-    recommendedPromptAdditions: ["쿨 화이트 블랙 톤 유지", "미니멀 포인트", "자연광을 살리는 배치"],
-  };
-  const clutteredWorkAnalysis: RoomAnalysis = {
-    ...baseAnalysis,
-    id: "analysis_cluttered_work",
-    roomType: "작업방",
-    lightLevel: "낮음",
-    clutterLevel: "높음",
-    dominantTones: ["아이보리", "월넛", "웜 그레이"],
-    detectedFurniture: ["책상", "수납장", "러그"],
-    opportunities: ["책상 주변과 바닥 생활감을 수납 박스·카트로 먼저 정리"],
-    recommendedPromptAdditions: ["아이보리 월넛 톤 유지", "수납 중심", "웜톤 조명 보강", "못질 없이 설치"],
-  };
-
-  const brightPlan = buildInteriorDesignPlan({
+test("buildInteriorDesignPlan exposes distinct Step 2 value balance and mood directions", () => {
+  const plan = buildInteriorDesignPlan({
     budget: 500000,
-    prompt: "방을 깔끔하게 꾸미고 싶어요",
+    prompt: "방을 깔끔하게 꾸미고 싶어요. 조명과 수납, 러그까지 예산 안에서 추천해주세요.",
     generation: 1,
     keptFurniture: [],
-    roomAnalysis: brightLivingAnalysis,
-  });
-  const clutteredPlan = buildInteriorDesignPlan({
-    budget: 500000,
-    prompt: "방을 깔끔하게 꾸미고 싶어요",
-    generation: 2,
-    keptFurniture: [],
-    roomAnalysis: clutteredWorkAnalysis,
+    roomAnalysis: baseAnalysis,
   });
 
-  const brightTopProducts = brightPlan.concepts.map((concept) => concept.products.slice(0, 3).map((product) => product.id).join("/")).join("|");
-  const clutteredTopProducts = clutteredPlan.concepts.map((concept) => concept.products.slice(0, 3).map((product) => product.id).join("/")).join("|");
+  const titles = plan.concepts.map((concept) => concept.title).join(" / ");
+  const valuePlan = plan.concepts.find((concept) => concept.title.includes("가성비 우선"));
+  const balancedPlan = plan.concepts.find((concept) => concept.title.includes("균형"));
+  const moodPlan = plan.concepts.find((concept) => concept.title.includes("분위기 우선"));
 
-  assert.notEqual(brightTopProducts, clutteredTopProducts);
-  assert.match(clutteredPlan.promptBrief.normalizedPrompt, /수납 중심/);
-  assert.match(clutteredPlan.promptBrief.normalizedPrompt, /웜톤 조명 보강/);
-  assert.ok(clutteredPlan.concepts[0].highlights.some((highlight) => highlight.includes("방 분석")));
+  assert.ok(valuePlan, titles);
+  assert.ok(balancedPlan, titles);
+  assert.ok(moodPlan, titles);
+  assert.ok(valuePlan.usedBudget <= balancedPlan.usedBudget, `value plan should not spend more than balance: ${valuePlan.usedBudget} > ${balancedPlan.usedBudget}`);
+  assert.ok(moodPlan.usedBudget >= balancedPlan.usedBudget || moodPlan.products.some((product) => ["조명", "러그", "커튼", "침구", "소품", "패브릭"].includes(product.category)));
+  assert.doesNotMatch(plan.promptBrief.normalizedPrompt, /수납 중심|웜톤 조명 보강/);
+  assert.ok(plan.concepts.every((concept) => !concept.highlights.some((highlight) => highlight.includes("방 분석"))));
 });
-
 test("buildInteriorDesignPlan changes visible style copy for dark modern prompts instead of forcing warm wood tone", () => {
   const plan = buildInteriorDesignPlan({
     budget: 300000,

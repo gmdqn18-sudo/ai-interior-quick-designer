@@ -7,7 +7,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/designs
   const job = getDesignJob(jobId);
 
   if (!job) {
-    return NextResponse.json({ error: "생성 Job을 찾을 수 없습니다." }, { status: 404 });
+    return NextResponse.json({ error: "요청한 시안을 찾을 수 없습니다." }, { status: 404 });
   }
 
   return NextResponse.json({

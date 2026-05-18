@@ -54,7 +54,7 @@ export function buildShoppingListShareText(job: DesignGenerationJob, shareUrl?: 
     `설정 예산: ${formatWon(job.budget)}`,
     `사용 금액: ${formatWon(concept?.usedBudget ?? 0)}`,
     `남은 예산: ${formatWon(Math.max(0, job.budget - (concept?.usedBudget ?? 0)))}`,
-    job.roomAnalysis ? `방 분석: ${job.roomAnalysis.roomType} / 채광 ${job.roomAnalysis.lightLevel} / 생활감 ${job.roomAnalysis.clutterLevel}` : "방 분석: 텍스트 조건 기반",
+    job.roomAnalysis ? "사진 업로드 정보: 사진을 참고 자료로 등록함 / 구매 후보는 프롬프트 기준" : "입력 조건: 프롬프트와 예산 기준",
     shareUrl ? `공유 링크: ${shareUrl}` : null,
     "",
     productLines,
@@ -67,8 +67,8 @@ export function buildDesignShareSummary(job: DesignGenerationJob): DesignShareSu
   const heroConcept = job.concepts[0];
   const usedBudget = heroConcept?.usedBudget ?? 0;
   const roomAnalysisLabel = job.roomAnalysis
-    ? `${job.roomAnalysis.roomType} · 채광 ${job.roomAnalysis.lightLevel} · 생활감 ${job.roomAnalysis.clutterLevel}`
-    : "방 분석 없이 텍스트 조건으로 생성";
+    ? "사진 업로드 정보 있음 · 프롬프트 기준으로 구성"
+    : "프롬프트와 예산 기준으로 구성";
   const products = heroConcept?.products ?? [];
   const productCategories = Array.from(new Set(products.map((product) => product.category)));
   const budgetUsageRate = job.budget > 0 ? Math.round((usedBudget / job.budget) * 100) : 0;

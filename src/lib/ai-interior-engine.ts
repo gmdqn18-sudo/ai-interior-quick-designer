@@ -71,12 +71,12 @@ type ConceptTemplate = {
 const conceptTemplates: ConceptTemplate[] = [
   {
     slug: "analysis-fit",
-    title: "방 분석 맞춤 균형 시안",
-    strategy: "사진에서 추정한 채광·생활감·기존 가구를 먼저 반영하고, 예산 안에서 체감 변화가 큰 품목부터 조합합니다.",
+    title: "입력 조건 맞춤 균형 시안",
+    strategy: "입력한 예산·취향·기존 가구를 우선 기준으로 삼고, 예산 안에서 체감 변화가 큰 품목부터 조합합니다.",
     palette: "bg-gradient-to-br from-slate-100 via-white to-stone-200",
     categories: ["수납", "조명", "러그", "커튼", "소품", "패브릭"],
     tags: ["storage", "lighting", "renter-safe"],
-    highlights: ["방 분석 결과 반영", "예산 대비 체감 변화 우선", "무타공·저시공 중심"],
+    highlights: ["입력 조건 기준", "예산 대비 체감 변화 우선", "무타공·저시공 중심"],
     baseScores: { budgetFitScore: 95, feasibilityScore: 94, roomStructureScore: 93 },
   },
   {
@@ -137,7 +137,7 @@ function inferStyleTags(promptIndex: string): InteriorStyleTag[] {
 }
 
 export function buildPromptBrief(input: DesignGenerationRequest): InteriorPromptBrief {
-  const analysis = input.roomAnalysis ?? null;
+  const analysis = input.roomAnalysis?.source === "mock-vision" ? null : input.roomAnalysis ?? null;
   const promptParts = [
     input.prompt.trim(),
     ...input.keptFurniture.map((item) => `기존 ${item} 유지`),
@@ -343,20 +343,26 @@ function expandQuantitiesForBudget(picked: Product[], brief: InteriorPromptBrief
 }
 
 function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, budget: number, productCandidates: Product[]) {
-  const budgetCap = Math.max(10000, Math.floor(budget * 0.96));
+  const isValuePlan = template.slug === "storage-reset";
+  const isMoodPlan = template.slug === "mood-layer";
+  const budgetCap = Math.max(10000, Math.floor(budget * (isValuePlan ? 0.72 : 0.96)));
   const isLargeCommercialPlan = brief.priorityTags.includes("commercial") && budget >= 2_000_000;
-  const targetSpend = isLargeCommercialPlan
+  const targetSpend = isValuePlan
+    ? Math.floor(budget * 0.45)
+    : isMoodPlan
+      ? Math.floor(budget * 0.82)
+      : isLargeCommercialPlan
     ? Math.floor(budget * 0.72)
     : brief.budgetTier === "premium"
       ? Math.floor(budget * 0.72)
       : brief.budgetTier === "standard"
         ? Math.floor(budget * 0.65)
         : 0;
-  const maxProducts = isLargeCommercialPlan ? 18 : brief.budgetTier === "premium" ? 12 : brief.budgetTier === "standard" ? 8 : 5;
+  const maxProducts = isValuePlan ? (brief.budgetTier === "premium" ? 8 : brief.budgetTier === "standard" ? 6 : 4) : isLargeCommercialPlan ? 18 : brief.budgetTier === "premium" ? 12 : brief.budgetTier === "standard" ? 8 : 5;
   const sorted = productCandidates
     .map((product, index) => ({ product, score: scoreProduct(product, template, brief, index) }))
     .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score || (brief.budgetTier === "starter" ? a.product.price - b.product.price : b.product.price - a.product.price));
+    .sort((a, b) => b.score - a.score || (isValuePlan ? a.product.price - b.product.price : brief.budgetTier === "starter" ? a.product.price - b.product.price : b.product.price - a.product.price));
 
   const picked: Product[] = [];
   let total = 0;
@@ -455,8 +461,8 @@ function getTitlePrefix(brief: InteriorPromptBrief) {
 function getTitleForBrief(template: ConceptTemplate, brief: InteriorPromptBrief) {
   const titlePrefix = getTitlePrefix(brief);
   if (template.slug === "analysis-fit") return `${titlePrefix} 균형 시안`;
-  if (template.slug === "storage-reset") return `${titlePrefix} 수납·정리 시안`;
-  if (template.slug === "mood-layer") return `${titlePrefix} 분위기 전환 시안`;
+  if (template.slug === "storage-reset") return `${titlePrefix} 가성비 우선 시안`;
+  if (template.slug === "mood-layer") return `${titlePrefix} 분위기 우선 시안`;
   return template.title;
 }
 
@@ -464,24 +470,24 @@ function getStrategyForBrief(template: ConceptTemplate, brief: InteriorPromptBri
   const styleLabel = getStyleLabel(brief);
   const promptSummary = summarizeUserPrompt(brief);
   if (template.slug === "storage-reset") {
-    return `프롬프트 핵심(${promptSummary})을 기준으로 생활감·수납·선 정리 우선순위를 정합니다.`;
+    return `프롬프트 핵심(${promptSummary})을 기준으로 꼭 필요한 수납·조명·기본 포인트부터 낮은 비용 순으로 구성합니다.`;
   }
   if (template.slug === "mood-layer") {
     if (brief.priorityTags.includes("living-room")) {
-      return `프롬프트 핵심(${promptSummary})을 기준으로 조명·러그·쿠션·소품의 분위기 전환 범위를 정합니다.`;
+      return `프롬프트 핵심(${promptSummary})을 기준으로 조명·러그·쿠션·소품에 예산을 더 배분해 분위기 완성도를 높입니다.`;
     }
-    return `프롬프트 핵심(${promptSummary})을 기준으로 조명·패브릭·소품의 분위기 전환 범위를 정합니다.`;
+    return `프롬프트 핵심(${promptSummary})을 기준으로 조명·패브릭·소품에 예산을 더 배분해 분위기 완성도를 높입니다.`;
   }
   return `프롬프트 핵심(${promptSummary})을 기준으로 ${styleLabel} 방향의 예산 맞춤 구매 조합을 만듭니다.`;
 }
 
 function getHighlightsForBrief(template: ConceptTemplate, brief: InteriorPromptBrief) {
   const styleLabel = getStyleLabel(brief);
-  const styleHighlight = brief.styleTags.includes("warm-tone") ? "따뜻한 우드톤 반영" : `${styleLabel} 반영`;
+  const styleHighlight = brief.styleTags.includes("warm-tone") ? "따뜻한 우드톤 기준" : `${styleLabel} 기준`;
   return [
     styleHighlight,
     ...template.highlights.filter((highlight) => !highlight.includes("우드톤") && !highlight.includes("따뜻한")),
-    ...(brief.analysisSummary ? [`방 분석: ${brief.roomType} · ${brief.priorityTags.slice(0, 3).join("/")}`] : []),
+    ...(brief.analysisSummary ? [`입력 조건 기준: ${brief.priorityTags.slice(0, 3).join("/")}`] : []),
   ].slice(0, 4);
 }
 

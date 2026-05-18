@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: DesignDetailPageProps): Promi
   const summary = buildDesignShareSummary(job);
   return {
     title: `${summary.heroTitle} | RoomFit AI`,
-    description: `${summary.budgetLabel} 예산으로 구성한 ${summary.productCount}개 상품 인테리어 시안입니다. ${summary.roomAnalysisLabel}`,
+    description: `${summary.budgetLabel} 예산으로 구성한 ${summary.productCount}개 구매 후보 포함 인테리어 시안입니다. ${summary.roomAnalysisLabel}`,
   };
 }
 
@@ -58,7 +58,7 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
               <span className="flex size-8 items-center justify-center rounded-full bg-[#ff385c] text-white shadow-lg shadow-rose-500/25">R</span>
               <span>RoomFit AI</span>
             </Link>
-            <p className="mt-1 text-xs font-bold text-slate-500">공유된 인테리어 시안 · {job.id}</p>
+            <p className="mt-1 text-xs font-bold text-slate-500">공유된 인테리어 시안</p>
           </div>
           <Link href="/#demo" className="rounded-full bg-[#ff385c] px-5 py-2.5 text-center text-sm font-black text-white shadow-lg shadow-rose-500/25 transition hover:-translate-y-0.5 hover:bg-[#e00b41]">
             내 방도 다시 만들기
@@ -70,11 +70,11 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
             <div className="inline-flex rounded-full bg-rose-50 px-4 py-2 text-xs font-black text-[#ff385c]">
               {job.mode === "real-product-composition"
                 ? job.productSearchMeta?.status === "live"
-                  ? "네이버 쇼핑 실시간 검색 기반 결과"
+                  ? "실시간 상품 후보 기반 결과"
                   : job.productSearchMeta?.status === "partial-fallback"
-                    ? "실시간 검색+기본 카탈로그 보완 결과"
-                    : "기본 카탈로그 fallback 결과"
-                : "브라우저 대체 생성 결과"}
+                    ? "실시간 후보+기본 카탈로그 보완 결과"
+                    : "기본 카탈로그 보완 결과"
+                : "기본 후보로 생성한 결과"}
             </div>
             <h1 className="mt-5 text-4xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">{summary.heroTitle}</h1>
             <p className="mt-4 max-w-2xl text-base leading-8 text-slate-700">{summary.heroStrategy}</p>
@@ -92,17 +92,8 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
             </div>
 
             <div className="mt-5 rounded-3xl bg-emerald-50 p-4 text-sm text-emerald-900">
-              <p className="font-black">방 분석 요약</p>
-              <p className="mt-2 leading-6">{summary.roomAnalysisLabel}</p>
-              {job.roomAnalysis ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {job.roomAnalysis.recommendedPromptAdditions.map((item) => (
-                    <span key={item} className="rounded-full bg-white px-3 py-1 text-xs font-black text-emerald-700 shadow-sm">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
+              <p className="font-black">입력 조건 기준</p>
+              <p className="mt-2 leading-6">사진 판독 결과를 확정값처럼 쓰지 않고, 사용자가 입력한 프롬프트와 예산을 우선해 구성한 시안입니다.</p>
             </div>
 
             <div className="mt-5 rounded-3xl bg-slate-50 p-4">
@@ -125,10 +116,10 @@ export default async function DesignDetailPage({ params }: DesignDetailPageProps
               <div className="absolute bottom-12 left-1/2 h-16 w-44 -translate-x-1/2 rounded-[999px] bg-white/45 shadow-sm" />
               <div className="relative z-10 flex items-start justify-between gap-4">
                 <div className="rounded-3xl bg-white/85 p-4 shadow-sm backdrop-blur">
-                  <p className="text-xs font-black text-[#ff385c]">AI 시안 미리보기</p>
+                  <p className="text-xs font-black text-[#ff385c]">시안 방향 미리보기</p>
                   <h2 className="mt-1 max-w-xs text-2xl font-black">{heroConcept.title}</h2>
                 </div>
-                <div className="rounded-full bg-white/90 px-3 py-2 text-xs font-black shadow-sm">{summary.productCount}개 상품</div>
+                <div className="rounded-full bg-white/90 px-3 py-2 text-xs font-black shadow-sm">{summary.productCount}개 구매 후보</div>
               </div>
               <div className="relative z-10 grid gap-3 sm:grid-cols-3">
                 {summary.topHighlights.map((highlight) => (

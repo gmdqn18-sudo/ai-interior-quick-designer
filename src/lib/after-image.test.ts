@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildAfterImagePrompt, imageDataUrlToBlobParts, normalizeRenderAfterRequest } from "./after-image";
+import { buildAfterImagePrompt, buildProductCompositePrompt, imageDataUrlToBlobParts, normalizeRenderAfterRequest } from "./after-image";
 import type { DesignConcept } from "./interior-design";
 
 const concept: DesignConcept = {
@@ -95,7 +95,7 @@ test("buildAfterImagePrompt changes image context for cafe office and showroom p
 
 test("buildAfterImagePrompt does not inject a warm-minimal default when user prompt is empty", () => {
   const prompt = buildAfterImagePrompt({
-    concept: { ...concept, title: "블랙·모던 균형 시안", strategy: "차콜과 실버 중심으로 정돈한다.", highlights: ["블랙·모던 반영"] },
+    concept: { ...concept, title: "블랙·모던 균형 시안", strategy: "차콜과 실버 중심으로 정돈한다.", highlights: ["블랙·모던 기준"] },
     userPrompt: "",
     keptFurniture: [],
   });
@@ -122,11 +122,44 @@ test("normalizeRenderAfterRequest rejects missing image and keeps valid concept"
     concept,
     userPrompt: "화이트 미니멀",
     keptFurniture: ["책상"],
+    productReference: {
+      id: "naver-product-1",
+      name: "실제 상품 러그",
+      category: "러그",
+      imageUrl: "https://example.com/rug.jpg",
+      source: "네이버쇼핑",
+      url: "https://example.com/product",
+    },
   });
 
   assert.equal(valid.ok, true);
   if (valid.ok) {
     assert.equal(valid.input.image.mimeType, "image/jpeg");
     assert.equal(valid.input.concept.id, concept.id);
+    assert.equal(valid.input.productReference?.id, "naver-product-1");
+    assert.equal(valid.input.productReference?.imageUrl, "https://example.com/rug.jpg");
   }
+});
+
+test("buildProductCompositePrompt locks the selected product identity for C-option harmonization", () => {
+  const prompt = buildProductCompositePrompt({
+    concept,
+    userPrompt: "책상은 유지하고 러그만 먼저 확인",
+    keptFurniture: ["책상"],
+    productReference: {
+      id: "naver-product-1",
+      name: "실제 상품 러그",
+      category: "러그",
+      imageUrl: "https://example.com/rug.jpg",
+      source: "네이버쇼핑",
+      url: "https://example.com/product",
+    },
+    placementLabel: "바닥 중앙",
+  });
+
+  assert.match(prompt, /CRITICAL PRODUCT LOCK/);
+  assert.match(prompt, /실제 상품 러그/);
+  assert.match(prompt, /Do not alter the product identity, silhouette, color, pattern, proportions/i);
+  assert.match(prompt, /Only harmonize lighting, contact shadow, color temperature/i);
+  assert.doesNotMatch(prompt, /Recommended items to reflect visually/i);
 });

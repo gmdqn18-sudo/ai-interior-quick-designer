@@ -58,7 +58,7 @@ export function analyzeRoomImageMock(file: { name: string; type: string; size: n
     recommendedPromptAdditions: [
       `${dominantTones.join(" ")} 톤 유지`,
       needsStorage ? "수납 중심" : "미니멀 포인트",
-      needsLight ? "웜톤 조명 보강" : "자연광을 살리는 배치",
+      needsLight ? "웜톤 조명 보강" : "자연광을 살리는 정리",
       "못질 없이 설치",
     ],
     confidenceScore: Math.min(94, 78 + (seed % 17)),

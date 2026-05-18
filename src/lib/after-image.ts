@@ -1,12 +1,14 @@
 import type { DesignConcept } from "./interior-design";
+import type { ProductReference } from "./product-composition";
 
-export type RenderAfterImageMode = "openai-image-edit" | "mock-image-preview";
+export type RenderAfterImageMode = "openai-image-edit" | "product-composite-edit" | "mock-image-preview";
 
 export type RenderAfterRequest = {
   imageDataUrl?: unknown;
   concept?: unknown;
   userPrompt?: unknown;
   keptFurniture?: unknown;
+  productReference?: unknown;
 };
 
 export type ParsedImageData = {
@@ -19,6 +21,7 @@ export type RenderAfterInput = {
   concept: DesignConcept;
   userPrompt: string;
   keptFurniture: string[];
+  productReference?: ProductReference;
 };
 
 export type RenderAfterResponse = {
@@ -31,6 +34,10 @@ export type RenderAfterResponse = {
     model: string;
     conceptId: string;
     generatedAt: string;
+    productReferenceId?: string;
+    compositionMode?: "single-product-preset";
+    placementLabel?: string;
+    fallbackReason?: string;
   };
 };
 
@@ -49,6 +56,20 @@ function isDesignConcept(value: unknown): value is DesignConcept {
       "strategy" in value &&
       "products" in value &&
       Array.isArray((value as DesignConcept).products),
+  );
+}
+
+function isProductReference(value: unknown): value is ProductReference {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof (value as ProductReference).id === "string" &&
+      typeof (value as ProductReference).name === "string" &&
+      typeof (value as ProductReference).category === "string" &&
+      typeof (value as ProductReference).imageUrl === "string" &&
+      typeof (value as ProductReference).source === "string" &&
+      typeof (value as ProductReference).url === "string" &&
+      (value as ProductReference).imageUrl.startsWith("http"),
   );
 }
 
@@ -115,6 +136,35 @@ export function buildAfterImagePrompt(input: {
   ].join("\n");
 }
 
+export function buildProductCompositePrompt(input: {
+  concept: DesignConcept;
+  userPrompt: string;
+  keptFurniture: string[];
+  productReference: ProductReference;
+  placementLabel?: string;
+}) {
+  const keptFurnitureText = input.keptFurniture.length > 0 ? input.keptFurniture.join(", ") : "no specific furniture";
+  const imageContext = inferImageContext(input);
+
+  return [
+    "Use the provided room photo as a pre-composited image: one real product image has already been placed on top of the original room photo.",
+    "CRITICAL PRODUCT LOCK: preserve the selected product exactly as the visible product in the input image.",
+    "Do not alter the product identity, silhouette, color, pattern, proportions, logo, material cues, or visible details.",
+    "Do not replace the product with a similar item and do not hallucinate a different product.",
+    "Only harmonize lighting, contact shadow, color temperature, edge blending, and subtle spatial ambience around the already-placed product.",
+    "Keep the exact same camera position, lens perspective, field of view, crop, and room geometry as the input photo.",
+    "Preserve fixed architecture: walls, floor, ceiling lines, door, window, built-in structures, and visible room boundaries.",
+    imageContext,
+    `Selected real product to preserve: ${input.productReference.category}: ${input.productReference.name}`,
+    `Preset area used before AI harmonization: ${input.placementLabel ?? "single product preset"}`,
+    `Design concept title: ${input.concept.title}`,
+    `User requested mood and constraints: ${input.userPrompt || "use the selected concept and retained furniture; do not invent an extra default style"}`,
+    `Furniture to keep and visually retain in the same approximate location: ${keptFurnitureText}`,
+    "The result is a product-identity preservation test, not a free redesign. If anything conflicts, prioritize preserving the selected product over making the room prettier.",
+    "No text, no labels, no watermark, no people, no extra UI elements.",
+  ].join("\n");
+}
+
 export function normalizeRenderAfterRequest(body: RenderAfterRequest): NormalizedRenderAfterRequest {
   if (typeof body.imageDataUrl !== "string" || body.imageDataUrl.length < 30) {
     return { ok: false, error: "원본 방 사진이 필요합니다." };
@@ -130,6 +180,16 @@ export function normalizeRenderAfterRequest(body: RenderAfterRequest): Normalize
     const keptFurniture = Array.isArray(body.keptFurniture)
       ? body.keptFurniture.filter((item): item is string => typeof item === "string").slice(0, 10)
       : [];
+    const productReference = isProductReference(body.productReference)
+      ? {
+          id: body.productReference.id.slice(0, 120),
+          name: body.productReference.name.slice(0, 160),
+          category: body.productReference.category.slice(0, 40),
+          imageUrl: body.productReference.imageUrl,
+          source: body.productReference.source.slice(0, 40) as ProductReference["source"],
+          url: body.productReference.url,
+        }
+      : undefined;
 
     return {
       ok: true,
@@ -138,6 +198,7 @@ export function normalizeRenderAfterRequest(body: RenderAfterRequest): Normalize
         concept: body.concept,
         userPrompt,
         keptFurniture,
+        productReference,
       },
     };
   } catch (error) {

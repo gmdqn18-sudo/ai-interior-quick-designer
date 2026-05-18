@@ -64,7 +64,7 @@ export function getProductPlacement(product: Product) {
     case "침구":
       return "침대 위 큰 면적";
     case "책상/테이블":
-      return "업무·식음·작업 동선의 중심 배치 영역";
+      return "업무·식음·작업 동선의 중심 영역";
     case "의자":
       return "테이블/데스크와 함께 쓰는 좌석 영역";
     case "가구":
@@ -239,7 +239,7 @@ export const productPool: Product[] = [
     url: "https://www.ikea.com/kr/ko/p/ringblomma-roman-blind-beige-20583539/",
     linkType: "product-detail",
     verifiedAt: "2026-05-17",
-    reason: "큰 창도 실제 상품 상세 페이지 기준으로 예산에 반영합니다.",
+    reason: "큰 창용 커튼을 상품 상세 페이지 가격 기준으로 예산에 포함합니다.",
   },
   {
     id: "ikea-nissafors-trolley-white",
@@ -275,7 +275,7 @@ export const productPool: Product[] = [
     url: "https://www.ikea.com/kr/ko/p/mosslanda-picture-ledge-white-70297465/",
     linkType: "product-detail",
     verifiedAt: "2026-05-17",
-    reason: "액자·소품을 올려 벽면을 꾸미는 실제 상품입니다.",
+    reason: "액자·소품을 올려 벽면을 꾸미는 구매 후보입니다.",
   },
   {
     id: "ikea-billy-bookcase-white",
@@ -359,7 +359,7 @@ export const productPool: Product[] = [
     url: "https://www.ikea.com/kr/ko/p/nesna-bedside-table-bamboo-20247128/",
     linkType: "product-detail",
     verifiedAt: "2026-05-17",
-    reason: "대나무 소재 협탁으로 우드톤 침실에 잘 맞는 실제 상품입니다.",
+    reason: "대나무 소재 협탁으로 우드톤 침실에 잘 맞는 구매 후보입니다.",
   },
   {
     id: "ikea-tonstad-bedside-table",
@@ -407,7 +407,7 @@ export const productPool: Product[] = [
     url: "https://www.ikea.com/kr/ko/p/pjaetteryd-picture-forest-fairy-tale-10614131/",
     linkType: "product-detail",
     verifiedAt: "2026-05-17",
-    reason: "지브리풍·숲·동화 컨셉을 실제 그림 상품으로 반영합니다.",
+    reason: "지브리풍·숲·동화 컨셉에 맞는 그림 구매 후보입니다.",
   },
   {
     id: "ikea-fejka-grass-pot",
