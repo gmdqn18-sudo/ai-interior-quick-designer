@@ -61,7 +61,7 @@ test("buildProductSearchQueries uses residential shopping labels instead of broa
 
 test("resolveProductCandidatesForDesign supplements live results when requested residential slots are missing", async () => {
   const items = Array.from({ length: 12 }, (_, index) => ({
-    title: `원룸 베이지 침구 이불 세트 ${index + 1}`,
+    title: `원룸 베이지 매트리스 커버 세트 ${index + 1}`,
     link: `https://smartstore.naver.com/bedding/products/${index + 1}`,
     lprice: String(40000 + index * 1000),
     mallName: "침구몰",

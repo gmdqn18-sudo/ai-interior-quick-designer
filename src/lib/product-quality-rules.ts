@@ -43,7 +43,7 @@ export function hasCategoryKeywordMismatch(product: Product) {
   const text = productIntrinsicText(product);
   if (product.category === "수납" && hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.의자)) return true;
   if (product.category === "의자" && hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.수납) && !hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.의자)) return true;
-  if (product.category === "러그" && !hasAnyKeyword(text, CATEGORY_POSITIVE_KEYWORDS.러그)) return true;
+  if (product.category === "러그" && !hasAnyKeyword(text, ["러그", "카페트"])) return true;
   return false;
 }
 
