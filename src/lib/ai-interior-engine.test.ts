@@ -221,6 +221,50 @@ test("buildInteriorDesignPlan changes visible style copy for dark modern prompts
   assert.ok(plan.concepts[0].palette.includes("zinc") || plan.concepts[0].palette.includes("slate"));
 });
 
+test("buildInteriorDesignPlan covers explicitly requested categories when live candidates are available", () => {
+  const liveProduct = (category: string, name: string, price: number): Product => ({
+    id: `live-${category}-${name}`.replace(/\s+/g, "-"),
+    externalId: `external-${category}-${name}`,
+    name,
+    category,
+    price,
+    source: "네이버쇼핑",
+    url: `https://smartstore.naver.com/test/products/${encodeURIComponent(name)}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: `${category} live candidate`,
+    provider: "naver-shopping",
+    searchQuery: `${category} 검색`,
+    availabilityNote: "가격/재고 변동 가능",
+    mallName: "테스트몰",
+  });
+  const productCandidates: Product[] = [
+    liveProduct("조명", "화이트 사무실 LED 조명 스탠드", 40000),
+    liveProduct("조명", "화이트 사무실 펜던트 조명", 50000),
+    liveProduct("조명", "그레이 업무용 무드등", 45000),
+    liveProduct("수납", "사무실 수납 캐비닛 정리대", 90000),
+    liveProduct("가구", "4인 오피스 데스크 책상", 180000),
+    liveProduct("가구", "그레이 사무용 의자 체어", 110000),
+  ];
+
+  const plan = buildInteriorDesignPlan(
+    {
+      budget: 800000,
+      prompt: "작은 4인 오피스를 꾸미려고 합니다. 화이트와 그레이 중심의 미니멀한 분위기로 책상, 의자, 수납, 조명을 추천해주세요.",
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    },
+    { productCandidates },
+  );
+  const selectedText = plan.concepts[0].products.map((product) => `${product.category} ${product.name}`).join(" ");
+
+  assert.match(selectedText, /책상|데스크/);
+  assert.match(selectedText, /의자|체어/);
+  assert.match(selectedText, /수납|캐비닛|정리대/);
+  assert.match(selectedText, /조명|스탠드|무드등/);
+});
+
 test("buildInteriorDesignPlan can use injected live product candidates instead of the static productPool", () => {
   const liveProducts: Product[] = Array.from({ length: 5 }, (_, index) => ({
     id: `naver-live-light-${index + 1}`,

@@ -48,6 +48,82 @@ test("resolveProductCandidatesForDesign falls back to productPool when Naver cre
   }
 });
 
+test("buildProductSearchQueries uses residential shopping labels instead of broad 주거 labels", () => {
+  const queries = buildProductSearchQueries({
+    ...request,
+    prompt: "월세 원룸을 깔끔하고 따뜻한 우드톤으로 꾸미고 싶습니다. 침구, 조명, 러그, 수납을 예산 안에서 추천해주세요.",
+  });
+
+  assert.ok(queries.every((query) => query.spaceLabel === "원룸"));
+  assert.ok(queries.every((query) => query.query.includes("원룸")));
+  assert.ok(queries.every((query) => !query.query.includes("주거")));
+});
+
+test("resolveProductCandidatesForDesign filters negative shopping results and dedupes normalized product identities", async () => {
+  const items = [
+    {
+      title: "터치기본가디건 하객룩 데일리룩 오피스룩 가디건",
+      link: "https://search.shopping.naver.com/catalog/fashion",
+      lprice: "22000",
+      mallName: "네이버",
+      productId: "fashion-1",
+      category1: "패션의류",
+    },
+    {
+      title: "화이트 그레이 사무용 데스크 책상 1200",
+      link: "https://smartstore.naver.com/office/products/desk-1",
+      lprice: "180000",
+      mallName: "오피스몰",
+      productId: "desk-1",
+      category1: "가구/인테리어",
+    },
+    {
+      title: "화이트 그레이 사무용 데스크 책상 1200",
+      link: "https://smartstore.naver.com/office/products/desk-1?NaPm=duplicate",
+      lprice: "180000",
+      mallName: "오피스몰",
+      productId: "desk-1-dup",
+      category1: "가구/인테리어",
+    },
+    {
+      title: "화이트 사무실 LED 조명 스탠드",
+      link: "https://smartstore.naver.com/office/products/light-1",
+      lprice: "42000",
+      mallName: "조명몰",
+      productId: "light-1",
+      category1: "가구/인테리어",
+    },
+    {
+      title: "사무실 수납 캐비닛 정리대",
+      link: "https://smartstore.naver.com/office/products/storage-1",
+      lprice: "90000",
+      mallName: "수납몰",
+      productId: "storage-1",
+      category1: "가구/인테리어",
+    },
+  ];
+  const fetchImpl: typeof fetch = async () =>
+    new Response(JSON.stringify({ total: items.length, start: 1, display: items.length, items }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  const result = await resolveProductCandidatesForDesign(
+    {
+      ...request,
+      prompt: "작은 4인 오피스를 꾸미려고 합니다. 화이트와 그레이 중심의 미니멀한 분위기로 책상, 의자, 수납, 조명을 추천해주세요.",
+    },
+    undefined,
+    { clientId: "client-id", clientSecret: "client-secret", fetchImpl, display: items.length, minLiveProducts: 3, maxQueries: 1 },
+  );
+
+  assert.equal(result.meta.status, "live");
+  assert.ok(result.products.every((product) => !/가디건|오피스룩|하객룩|데일리룩/.test(product.name)));
+  assert.equal(result.products.filter((product) => product.name === "화이트 그레이 사무용 데스크 책상 1200").length, 1);
+  assert.ok(result.products.some((product) => product.name.includes("조명")));
+  assert.ok(result.products.some((product) => product.name.includes("수납")));
+});
+
 test("resolveProductCandidatesForDesign uses live candidates before fallback when Naver search succeeds", async () => {
   const fetchImpl: typeof fetch = async () =>
     new Response(

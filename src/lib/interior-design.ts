@@ -63,6 +63,10 @@ export function getProductPlacement(product: Product) {
       return "책상 옆·침대 밑·노출 수납 구역";
     case "침구":
       return "침대 위 큰 면적";
+    case "책상/테이블":
+      return "업무·식음·작업 동선의 중심 배치 영역";
+    case "의자":
+      return "테이블/데스크와 함께 쓰는 좌석 영역";
     case "가구":
       return "침대 옆 또는 빈 코너";
     case "거실가구":

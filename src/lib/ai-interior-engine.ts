@@ -1,5 +1,12 @@
 import type { DesignGenerationRequest, RoomAnalysis } from "./design-api";
 import { productPool, type DesignConcept, type Product } from "./interior-design";
+import {
+  CATEGORY_POSITIVE_KEYWORDS,
+  countCategoryKeywordMatches,
+  countSoftProductPenalties,
+  hasStrongProductExclude,
+  productQualityText,
+} from "./product-quality-rules";
 
 export type InteriorPriorityTag =
   | "storage"
@@ -170,6 +177,39 @@ export function buildPromptBrief(input: DesignGenerationRequest): InteriorPrompt
   };
 }
 
+type RequestedCategorySlot = {
+  id: string;
+  keywords: string[];
+};
+
+function requestedCategorySlots(brief: InteriorPromptBrief): RequestedCategorySlot[] {
+  const prompt = brief.normalizedPrompt;
+  const slots: RequestedCategorySlot[] = [];
+  const add = (id: string, keywords: string[]) => {
+    if (slots.some((slot) => slot.id === id)) return;
+    slots.push({ id, keywords });
+  };
+
+  if (hasAny(prompt, ["책상", "데스크", "테이블", "바 테이블", "바테이블", "카운터"])) add("책상/테이블", CATEGORY_POSITIVE_KEYWORDS["책상/테이블"]);
+  if (hasAny(prompt, ["의자", "체어", "스툴", "바스툴", "좌석"])) add("의자", CATEGORY_POSITIVE_KEYWORDS.의자);
+  if (hasAny(prompt, ["수납", "선반", "서랍", "책장", "정리대", "캐비닛", "장식장"])) add("수납", CATEGORY_POSITIVE_KEYWORDS.수납);
+  if (hasAny(prompt, ["조명", "무드등", "펜던트", "스탠드", "램프", "벽등"])) add("조명", CATEGORY_POSITIVE_KEYWORDS.조명);
+  if (hasAny(prompt, ["침구", "이불", "베개", "커버", "매트리스", "패드"])) add("침구", CATEGORY_POSITIVE_KEYWORDS.침구);
+  if (hasAny(prompt, ["러그", "카페트", "매트"])) add("러그", CATEGORY_POSITIVE_KEYWORDS.러그);
+  if (hasAny(prompt, ["커튼", "블라인드"])) add("커튼", CATEGORY_POSITIVE_KEYWORDS.커튼);
+
+  return slots;
+}
+
+function productMatchesSlot(product: Product, slot: RequestedCategorySlot) {
+  const text = productQualityText(product);
+  return product.category === slot.id || slot.keywords.some((keyword) => text.includes(keyword));
+}
+
+function sameProductIdentity(a: Product, b: Product) {
+  return a.id === b.id || a.externalId === b.externalId || a.url.split("?")[0] === b.url.split("?")[0] || (a.mallName === b.mallName && a.name === b.name);
+}
+
 function productTags(product: Product): InteriorPriorityTag[] {
   const text = `${product.name} ${product.category} ${product.reason}`;
   const tags: InteriorPriorityTag[] = [];
@@ -196,6 +236,9 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
   const tagMatches = tags.filter((tag) => brief.priorityTags.includes(tag)).length;
   const templateMatches = tags.filter((tag) => template.tags.includes(tag)).length;
   const categoryMatch = template.categories.includes(product.category) ? 2 : 0;
+  const positiveCategoryScore = countCategoryKeywordMatches(product) * 6;
+  const softPenalty = countSoftProductPenalties(product) * 5;
+  const overBudgetSharePenalty = product.price > 0 && product.price > 450000 && brief.budgetTier !== "premium" ? 4 : 0;
   const budgetPenalty = brief.budgetTier === "starter" && product.price > 50000 ? 2 : 0;
   const premiumBudgetBoost = brief.budgetTier === "premium" ? Math.min(8, product.price / 30000) : 0;
   const standardBudgetBoost = brief.budgetTier === "standard" ? Math.min(3, product.price / 60000) : 0;
@@ -216,18 +259,23 @@ function scoreProduct(product: Product, template: ConceptTemplate, brief: Interi
     tagMatches * 5 +
     templateMatches * 3 +
     categoryMatch +
+    positiveCategoryScore +
     premiumBudgetBoost +
     standardBudgetBoost +
     cozySpecificBoost +
     livingRoomSpecificBoost -
     budgetPenalty -
+    softPenalty -
+    overBudgetSharePenalty -
     promptMismatchPenalty -
     index * 0.03
   );
 }
 
 function canAddProduct(product: Product, picked: Product[], brief: InteriorPromptBrief) {
+  if (hasStrongProductExclude(product)) return false;
   if (product.category === "침구" && brief.priorityTags.includes("living-room") && !brief.priorityTags.includes("hotel")) return false;
+  if (picked.some((item) => sameProductIdentity(item, product))) return false;
 
   const sameCategoryCount = picked.filter((item) => item.category === product.category).length;
   const isLivingRoomPlan = brief.priorityTags.includes("living-room");
@@ -309,19 +357,33 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
 
   const picked: Product[] = [];
   let total = 0;
+  const addProduct = (product: Product) => {
+    if (!canAddProduct(product, picked, brief)) return false;
+    if (total + product.price > budgetCap) return false;
+    picked.push(product);
+    total += product.price;
+    return true;
+  };
+
+  for (const slot of requestedCategorySlots(brief)) {
+    if (picked.length >= maxProducts) break;
+    const candidate = sorted
+      .map(({ product }) => product)
+      .filter((product) => productMatchesSlot(product, slot))
+      .sort((a, b) => scoreProduct(b, template, brief, 0) - scoreProduct(a, template, brief, 0) || a.price - b.price)
+      .find((product) => total + product.price <= budgetCap && canAddProduct(product, picked, brief));
+    if (candidate) addProduct(candidate);
+  }
 
   for (const { product } of sorted) {
     if (brief.budgetTier === "starter" && picked.some((item) => item.category === product.category) && picked.length >= 3) continue;
-    if (!canAddProduct(product, picked, brief)) continue;
-    if (total + product.price > budgetCap) continue;
-    picked.push(product);
-    total += product.price;
+    if (!addProduct(product)) continue;
     if (picked.length >= maxProducts) break;
   }
 
   if (targetSpend > 0 && total < targetSpend) {
     const fillers = productCandidates
-      .filter((product) => !picked.some((item) => item.id === product.id))
+      .filter((product) => !picked.some((item) => sameProductIdentity(item, product)))
       .sort((a, b) => {
         const templateCategoryScore = Number(template.categories.includes(b.category)) - Number(template.categories.includes(a.category));
         if (templateCategoryScore !== 0) return templateCategoryScore;
@@ -330,21 +392,15 @@ function selectProducts(template: ConceptTemplate, brief: InteriorPromptBrief, b
 
     for (const product of fillers) {
       if (picked.length >= maxProducts) break;
-      if (!canAddProduct(product, picked, brief)) continue;
-      if (total + product.price > budgetCap) continue;
-      picked.push(product);
-      total += product.price;
+      if (!addProduct(product)) continue;
       if (picked.length >= maxProducts) break;
     }
   }
 
   if (picked.length < 3) {
     for (const product of productCandidates.slice().sort((a, b) => a.price - b.price)) {
-      if (picked.some((item) => item.id === product.id)) continue;
-      if (!canAddProduct(product, picked, brief)) continue;
-      if (total + product.price > budgetCap) continue;
-      picked.push(product);
-      total += product.price;
+      if (picked.some((item) => sameProductIdentity(item, product))) continue;
+      if (!addProduct(product)) continue;
       if (picked.length >= 3) break;
     }
   }
