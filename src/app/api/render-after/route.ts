@@ -102,6 +102,7 @@ function buildCompositePreviewResponse(
 ): RenderAfterResponse {
   return {
     imageUrl: toImageDataUrl(prepared.image),
+    productCompositePreviewImageUrl: prepared.composition ? toImageDataUrl(prepared.image) : undefined,
     prompt: prepared.prompt,
     mode: "product-composite-preview",
     provider: "server-composite",
@@ -194,6 +195,7 @@ export async function POST(request: NextRequest) {
     const result = await callOpenAIImageEdit({ image: prepared.image, prompt: prepared.prompt });
     const response: RenderAfterResponse = {
       imageUrl: result.imageUrl,
+      productCompositePreviewImageUrl: prepared.composition ? toImageDataUrl(prepared.image) : undefined,
       prompt: result.prompt,
       mode: prepared.mode,
       provider: "openai",

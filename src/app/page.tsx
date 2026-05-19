@@ -17,6 +17,7 @@ import {
   keepOptions,
   styleChips,
 } from "@/lib/interior-design";
+import { getImageReflectionSelectionReason, selectProductsForImageReflection } from "@/lib/product-visual-selection";
 
 const formatter = new Intl.NumberFormat("ko-KR");
 
@@ -27,32 +28,8 @@ const renderProgressSteps = [
   "조명과 접지 그림자를 정리하는 중",
 ] as const;
 
-const productCompositeCategoryPriority = ["러그", "조명", "수납", "침구", "패브릭", "커튼", "책상/테이블", "거실가구", "소품", "의자"];
-
 function selectProductsForComposite(products: Product[], maxProducts = 3) {
-  const limit = Math.max(1, Math.min(3, maxProducts));
-  const withImages = products.filter((product) => Boolean(product.imageUrl));
-  const selected: Product[] = [];
-  const usedCategories = new Set<string>();
-
-  const trySelect = (product: Product) => {
-    if (selected.length >= limit || usedCategories.has(product.category)) return;
-    selected.push(product);
-    usedCategories.add(product.category);
-  };
-
-  for (const category of productCompositeCategoryPriority) {
-    const product = withImages.find((candidate) => candidate.category === category);
-    if (product) trySelect(product);
-    if (selected.length >= limit) break;
-  }
-
-  for (const product of withImages) {
-    trySelect(product);
-    if (selected.length >= limit) break;
-  }
-
-  return selected;
+  return selectProductsForImageReflection(products, maxProducts);
 }
 
 function formatWon(amount: number) {
@@ -294,6 +271,7 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [roomImageDataUrl, setRoomImageDataUrl] = useState<string | null>(null);
   const [generatedAfterImages, setGeneratedAfterImages] = useState<Record<string, string>>({});
+  const [productCompositePreviewImages, setProductCompositePreviewImages] = useState<Record<string, string>>({});
   const [generatedAfterModes, setGeneratedAfterModes] = useState<Record<string, RenderResultMode>>({});
   const [renderedProductIds, setRenderedProductIds] = useState<Record<string, string[]>>({});
   const [afterImageNotice, setAfterImageNotice] = useState("결과 이미지는 핵심 상품 배치와 스타일을 확인하는 출발점입니다. 실제 구매는 별도 상품 카드의 가격·옵션·사이즈를 확인한 뒤 판단하세요.");
@@ -320,6 +298,7 @@ export default function Home() {
   const isPromptReady = prompt.trim().length >= 8;
   const isBudgetTight = selectedConcept.usedBudget > budget;
   const generatedAfterImage = generatedAfterImages[selectedConcept.id];
+  const productCompositePreviewImage = productCompositePreviewImages[selectedConcept.id];
   const generatedAfterMode = generatedAfterModes[selectedConcept.id] ?? null;
   const renderResultBadge = getRenderResultBadge(generatedAfterMode, Boolean(generatedAfterImage));
   const activeProduct = selectedConcept.products.find((product) => product.id === activeProductId) ?? null;
@@ -335,8 +314,12 @@ export default function Home() {
   const additionalPurchaseProducts = canShowImageProductMapping
     ? selectedConcept.products.filter((product) => !renderedProductIdSet.has(product.id))
     : selectedConcept.products;
-  const mustBuyProducts = additionalPurchaseProducts.slice(0, Math.min(3, additionalPurchaseProducts.length));
-  const niceToHaveProducts = additionalPurchaseProducts.slice(mustBuyProducts.length);
+  const renderedProductCategories = new Set(visibleProductCompositeTargets.map((product) => product.category));
+  const alternativePurchaseProducts = canShowImageProductMapping ? additionalPurchaseProducts.filter((product) => renderedProductCategories.has(product.category)) : [];
+  const generalAdditionalProducts = canShowImageProductMapping ? additionalPurchaseProducts.filter((product) => !renderedProductCategories.has(product.category)) : additionalPurchaseProducts;
+  const mustBuyProducts = generalAdditionalProducts.slice(0, Math.min(3, generalAdditionalProducts.length));
+  const niceToHaveProducts = generalAdditionalProducts.slice(mustBuyProducts.length);
+  const imageReflectionSelectionReason = getImageReflectionSelectionReason();
   const planCompletionPercent = Math.min(100, Math.round((selectedConcept.usedBudget / Math.max(budget, 1)) * 100));
   const keptFurnitureText = keptFurniture.length > 0 ? keptFurniture.join(" · ") : "큰 가구는 최대한 유지";
   const furnitureOptions = roomAnalysis?.detectedFurniture.length ? roomAnalysis.detectedFurniture : keepOptions;
@@ -380,6 +363,7 @@ export default function Home() {
     setPreviewUrl(URL.createObjectURL(file));
     setRoomImageDataUrl(null);
     setGeneratedAfterImages({});
+    setProductCompositePreviewImages({});
     setGeneratedAfterModes({});
     setRenderedProductIds({});
     setAfterImageNotice("원본 방 사진을 대표 상품 배치 결과용으로 준비하는 중입니다...");
@@ -440,6 +424,10 @@ export default function Home() {
     setIsGenerating(true);
     setSelectedConceptId(null);
     setActiveProductId(null);
+    setGeneratedAfterImages({});
+    setProductCompositePreviewImages({});
+    setGeneratedAfterModes({});
+    setRenderedProductIds({});
     setCopyStatus("쇼핑 리스트 복사");
     setApiNotice("예산과 프롬프트 기준으로 구매 후보 리스트를 준비하는 중입니다...");
     setApiNoticeTone("neutral");
@@ -508,7 +496,7 @@ export default function Home() {
 
     setIsRenderingAfter(true);
     setRenderProgressStep(0);
-    setAfterImageNotice("러그·조명·수납 우선으로 핵심 실제 상품을 최대 3개까지 방 사진 위에 배치하고 조명·그림자를 맞추는 중입니다. 화면이 멈춘 것이 아니라 상품 합성과 AI 보정이 진행 중입니다.");
+    setAfterImageNotice(`${imageReflectionSelectionReason} 이 기준을 통과한 실제 상품만 최대 3개까지 방 사진 위에 배치하고 조명·그림자를 맞추는 중입니다.`);
 
     try {
       const response = await fetch("/api/render-after", {
@@ -547,8 +535,9 @@ export default function Home() {
 
       const isProductCompositeResult = data.mode === "product-composite-edit" || data.mode === "product-composite-preview";
       setGeneratedAfterImages((current) => ({ ...current, [selectedConcept.id]: data.imageUrl ?? "" }));
+      setProductCompositePreviewImages((current) => ({ ...current, [selectedConcept.id]: data.productCompositePreviewImageUrl ?? (data.mode === "product-composite-preview" ? data.imageUrl ?? "" : "") }));
       setGeneratedAfterModes((current) => ({ ...current, [selectedConcept.id]: data.mode ?? "mock-image-preview" }));
-        const renderedIds = isProductCompositeResult
+      const renderedIds = isProductCompositeResult
         ? data.meta?.productReferenceIds?.filter((id): id is string => typeof id === "string") ?? productCompositeTargets.map((product) => product.id)
         : [];
       setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: renderedIds }));
@@ -1075,12 +1064,23 @@ export default function Home() {
                       </div>
                     )}
                   </div>
+                  {productCompositePreviewImage && generatedAfterMode === "product-composite-edit" ? (
+                    <details className="mt-3 rounded-3xl border border-amber-200/30 bg-white/10 p-4 text-xs font-bold leading-5 text-slate-200">
+                      <summary className="cursor-pointer text-sm font-black text-amber-100">상품 확인용 1차 합성본 보기</summary>
+                      <p className="mt-2 text-slate-300">
+                        최종 AI 보정본은 분위기와 조명을 자연스럽게 맞춘 이미지입니다. 아래 1차 합성본은 보정 전 상품 위치와 썸네일 형태를 확인하는 보조 이미지이며, 기본 결과로 대체하지 않습니다.
+                      </p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={productCompositePreviewImage} alt="상품 확인용 1차 합성본" className="mt-3 h-56 w-full rounded-2xl bg-slate-950 object-contain sm:h-72" />
+                      <div className="mt-2 inline-flex rounded-full bg-amber-200 px-3 py-1 text-[11px] font-black text-slate-950">상품 확인용 합성본 · 실제 상품 위치 확인</div>
+                    </details>
+                  ) : null}
                   {visibleProductCompositeTarget ? (
                     <div className="mt-3 rounded-3xl border border-amber-200/30 bg-white/10 p-4 text-xs font-bold leading-5 text-slate-200">
                       <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                         <div>
                           <p className="text-sm font-black text-amber-100">이미지에 반영된 상품</p>
-                          <p className="mt-1 text-slate-300">러그·조명·수납 우선으로 최대 3개 핵심 상품만 방 사진에 배치했습니다.</p>
+                          <p className="mt-1 text-slate-300">{imageReflectionSelectionReason} 이 기준을 통과한 상품만 최대 3개 표시합니다.</p>
                         </div>
                         <span className="rounded-full bg-amber-200 px-3 py-1 text-[11px] font-black text-slate-950">{visibleProductCompositeTargets.length}개 반영</span>
                       </div>
@@ -1133,18 +1133,18 @@ export default function Home() {
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
                       {canShowImageProductMapping
-                        ? "위 ‘이미지에 반영된 상품’은 이 목록에서 제외했습니다. 아래 상품은 이미지에 들어간 것으로 보지 말고, 예산과 요청 조건 기준으로 별도 검토하세요."
-                        : "이미지 생성 전에는 전체 구매 후보를 준비합니다. 생성 후에는 이미지 반영 상품과 추가 구매 후보를 분리해서 보여드립니다."}
+                        ? `위 ‘이미지에 반영된 상품’은 이 목록에서 제외했습니다. 같은 카테고리 대체 후보는 별도 영역에 분리됩니다. ${imageReflectionSelectionReason}`
+                        : "이미지 생성 전에는 전체 구매 후보를 준비합니다. 생성 후에는 이미지 반영 상품, 같은 카테고리 대체 후보, 일반 추가 구매 후보를 분리해서 보여드립니다."}
                     </p>
                   </div>
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                    {canShowImageProductMapping ? `추가 ${additionalPurchaseProducts.length}개 · 전체 ${selectedConcept.products.length}개` : `전체 ${selectedConcept.products.length}개`} · {formatWon(selectedConcept.usedBudget)}
+                    {canShowImageProductMapping ? `일반 추가 ${generalAdditionalProducts.length}개 · 대체 ${alternativePurchaseProducts.length}개 · 전체 ${selectedConcept.products.length}개` : `전체 ${selectedConcept.products.length}개`} · {formatWon(selectedConcept.usedBudget)}
                   </span>
                 </div>
                 {canShowImageProductMapping ? (
-                  additionalPurchaseProducts.length > 0 ? (
+                  generalAdditionalProducts.length > 0 ? (
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {additionalPurchaseProducts.map((product, index) => (
+                      {generalAdditionalProducts.map((product, index) => (
                         <button
                           key={`additional-${product.id}`}
                           type="button"
@@ -1177,7 +1177,37 @@ export default function Home() {
                 )}
               </div>
 
-              {canShowImageProductMapping && additionalPurchaseProducts.length > 0 ? (
+              {canShowImageProductMapping && alternativePurchaseProducts.length > 0 ? (
+                <div className="mt-4 rounded-3xl border border-slate-500/60 bg-slate-950/25 p-4">
+                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-100">같은 카테고리의 대체 후보</h3>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-300">이미지에 반영된 상품과 같은 카테고리지만, 이미지 속 상품이 아닙니다. 사용자가 같은 역할의 다른 상품으로 비교할 때만 확인하세요.</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-950">이미지 미반영 · 대체 후보</span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {alternativePurchaseProducts.map((product) => (
+                      <button
+                        key={`alternative-${product.id}`}
+                        type="button"
+                        onMouseEnter={() => setActiveProductId(product.id)}
+                        onFocus={() => setActiveProductId(product.id)}
+                        onClick={() => setActiveProductId(product.id)}
+                        className={`group rounded-2xl border border-slate-300 bg-slate-100 p-3 text-left text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
+                      >
+                        <div className="mb-2 inline-flex rounded-full bg-slate-950 px-2 py-1 text-[10px] font-black text-white">이미지 미반영 · 대체 후보</div>
+                        <div className="truncate text-xs font-black">{product.name}</div>
+                        <div className="mt-1 text-[11px] font-bold text-slate-500">{product.category} · {product.source} · {formatProductPrice(product)}</div>
+                        <div className="mt-1 text-[11px] font-semibold text-slate-700 group-hover:underline">이미지 속 {product.category}과 다른 대체 상품입니다.</div>
+                        <div className="mt-1 text-[11px] font-bold text-slate-500">이미지에 들어간 것으로 보지 말고 상세페이지에서 별도 판단</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {canShowImageProductMapping && generalAdditionalProducts.length > 0 ? (
               <div className="mt-5 space-y-4">
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -1288,13 +1318,15 @@ export default function Home() {
                   </div>
                 ) : null}
               </div>
-              ) : canShowImageProductMapping ? (
+              ) : canShowImageProductMapping && alternativePurchaseProducts.length === 0 ? (
                 <div className="mt-5 rounded-3xl border border-dashed border-slate-500/60 bg-white/10 p-5 text-center text-sm font-bold leading-6 text-slate-300">
                   이번 시안은 이미지 반영 상품 외에 추가 구매 후보가 없습니다. 구매 전 가격·옵션·배송·재고는 위 상품 카드의 상세 링크에서 확인하세요.
                 </div>
               ) : (
                 <div className="mt-5 rounded-3xl border border-dashed border-slate-500/60 bg-white/10 p-5 text-center text-sm font-bold leading-6 text-slate-300">
-                  예산과 프롬프트 기준의 구매 후보를 준비했습니다. 대표 상품 배치 결과를 만든 뒤 이미지 반영 상품과 추가 구매 후보를 분리해서 확인할 수 있습니다.
+                  {canShowImageProductMapping
+                    ? "일반 추가 구매 후보는 없고, 같은 카테고리 대체 후보만 별도 영역에 분리했습니다. 대체 후보는 이미지에 들어간 상품이 아닙니다."
+                    : "예산과 프롬프트 기준의 구매 후보를 준비했습니다. 대표 상품 배치 결과를 만든 뒤 이미지 반영 상품과 추가 구매 후보를 분리해서 확인할 수 있습니다."}
                 </div>
               )}
             </div>

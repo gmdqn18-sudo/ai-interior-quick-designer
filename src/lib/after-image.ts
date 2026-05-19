@@ -28,6 +28,7 @@ export type RenderAfterInput = {
 
 export type RenderAfterResponse = {
   imageUrl: string | null;
+  productCompositePreviewImageUrl?: string;
   prompt: string;
   mode: RenderAfterImageMode;
   provider: "openai" | "server-composite" | "mock";

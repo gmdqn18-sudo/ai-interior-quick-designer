@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import sharp from "sharp";
 
 import type { Product } from "./interior-design";
+import { selectProductsForImageReflection } from "./product-visual-selection";
 
 export type ProductReference = Pick<Product, "id" | "name" | "category" | "imageUrl" | "source" | "url"> & {
   imageUrl: string;
@@ -52,7 +53,6 @@ const ALLOWED_PRODUCT_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/w
 const BLOCKED_HOSTNAMES = new Set(["localhost", "localhost.localdomain"]);
 const MAX_COMPOSITE_PRODUCTS = 3;
 
-const COMPOSITE_CATEGORY_PRIORITY = ["러그", "조명", "수납", "침구", "패브릭", "커튼", "책상/테이블", "거실가구", "소품", "의자"];
 const COMPOSITE_LAYER_ORDER = ["러그", "패브릭", "침구", "커튼", "책상/테이블", "거실가구", "수납", "의자", "소품", "조명"];
 
 function categoryRank(category: string, order: string[]) {
@@ -61,30 +61,7 @@ function categoryRank(category: string, order: string[]) {
 }
 
 export function selectProductReferencesForComposition<T extends ProductReference>(products: T[], maxProducts = MAX_COMPOSITE_PRODUCTS): T[] {
-  const limit = Math.max(1, Math.min(MAX_COMPOSITE_PRODUCTS, maxProducts));
-  const withImages = products.filter((product) => Boolean(product.imageUrl));
-  const picked: T[] = [];
-  const usedCategories = new Set<string>();
-
-  const tryPick = (product: T) => {
-    if (picked.length >= limit) return;
-    if (usedCategories.has(product.category)) return;
-    picked.push(product);
-    usedCategories.add(product.category);
-  };
-
-  for (const category of COMPOSITE_CATEGORY_PRIORITY) {
-    const product = withImages.find((candidate) => candidate.category === category);
-    if (product) tryPick(product);
-    if (picked.length >= limit) break;
-  }
-
-  for (const product of withImages) {
-    tryPick(product);
-    if (picked.length >= limit) break;
-  }
-
-  return picked;
+  return selectProductsForImageReflection(products, maxProducts);
 }
 
 export function getProductCompositionPlacement(category: string): ProductCompositionPlacement {
