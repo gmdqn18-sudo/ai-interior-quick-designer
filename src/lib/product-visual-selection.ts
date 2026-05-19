@@ -11,12 +11,17 @@ const HIGH_CONFIDENCE_CATEGORY_PRIORITY = ["러그", "책상/테이블", "커튼
 const MEDIUM_CONFIDENCE_CATEGORY_PRIORITY = ["수납", "침구", "패브릭"];
 const LOW_CONFIDENCE_CATEGORIES = new Set(["조명", "소품"]);
 
-const LARGE_STORAGE_KEYWORDS = ["선반", "책장", "장식장", "수납장", "캐비닛", "행거", "랙", "트롤리", "서랍장", "거실장"];
-const SMALL_STORAGE_KEYWORDS = ["바구니", "박스", "정리함", "소품", "미니", "데스크", "서랍", "꽂이", "홀더", "함"];
+const LARGE_STORAGE_KEYWORDS = ["책장", "선반장", "수납장", "장식장", "캐비닛", "행거", "랙", "거실장"];
+const SMALL_STORAGE_KEYWORDS = ["미니", "2칸", "3칸", "데스크", "탁상", "소형", "정리함", "수납함", "바구니", "트레이", "박스", "소품", "꽂이", "홀더"];
 const DISTINCTIVE_TEXTILE_KEYWORDS = ["러그", "카페트", "커튼", "암막", "패턴", "체크", "스트라이프", "쿠션", "침구", "이불"];
 
 function hasAnyKeyword(text: string, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
+}
+
+function isClearlyLargeStorage(text: string) {
+  if (hasAnyKeyword(text, SMALL_STORAGE_KEYWORDS)) return false;
+  return hasAnyKeyword(text, LARGE_STORAGE_KEYWORDS);
 }
 
 function getProductVisualConfidence(product: ProductVisualCandidate) {
@@ -27,9 +32,8 @@ function getProductVisualConfidence(product: ProductVisualCandidate) {
   if (HIGH_CONFIDENCE_CATEGORY_PRIORITY.includes(product.category)) return 3;
 
   if (product.category === "수납") {
-    if (hasAnyKeyword(text, LARGE_STORAGE_KEYWORDS)) return 2;
-    if (hasAnyKeyword(text, SMALL_STORAGE_KEYWORDS)) return 0;
-    return 1;
+    if (isClearlyLargeStorage(text)) return 2;
+    return 0;
   }
 
   if (product.category === "침구" || product.category === "패브릭") {

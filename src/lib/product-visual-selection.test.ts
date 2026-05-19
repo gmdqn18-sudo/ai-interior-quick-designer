@@ -29,13 +29,32 @@ test("selectProductsForImageReflection does not fill image reflected slots with 
     { id: "lamp", name: "테이블 무드 조명", category: "조명", imageUrl: image },
     { id: "decor", name: "작은 오브제 세트", category: "소품", imageUrl: image },
     { id: "box", name: "데스크 정리함", category: "수납", imageUrl: image },
+    { id: "mini-shelf", name: "미니 2칸 원룸수납선반 인테리어책장선반", category: "수납", imageUrl: image },
+    { id: "tray", name: "소형 바구니 트레이 수납함", category: "수납", imageUrl: image },
     { id: "rug", name: "원형 러그", category: "러그", imageUrl: image },
+    { id: "curtain", name: "암막 커튼", category: "커튼", imageUrl: image },
   ];
 
-  assert.deepEqual(selectProductsForImageReflection(products).map((product) => product.id), ["rug"]);
+  assert.deepEqual(selectProductsForImageReflection(products).map((product) => product.id), ["rug", "curtain"]);
   assert.equal(isProductImageReflectable(products[0]), false);
   assert.equal(isProductImageReflectable(products[1]), false);
   assert.equal(isProductImageReflectable(products[2]), false);
+  assert.equal(isProductImageReflectable(products[3]), false);
+  assert.equal(isProductImageReflectable(products[4]), false);
+});
+
+test("selectProductsForImageReflection allows storage only when the silhouette is clearly large", () => {
+  const products: Candidate[] = [
+    { id: "mini-bookcase", name: "미니 2칸 책장선반", category: "수납", imageUrl: image },
+    { id: "desktop-rack", name: "데스크 소형 랙 정리함", category: "수납", imageUrl: image },
+    { id: "large-cabinet", name: "와이드 거실 수납장 캐비닛", category: "수납", imageUrl: image },
+    { id: "hanger", name: "스탠드 행거 랙", category: "수납", imageUrl: image },
+  ];
+
+  assert.deepEqual(selectProductsForImageReflection(products).map((product) => product.id), ["large-cabinet"]);
+  assert.equal(isProductImageReflectable(products[0]), false);
+  assert.equal(isProductImageReflectable(products[1]), false);
+  assert.equal(isProductImageReflectable(products[2]), true);
 });
 
 test("selectProductsForImageReflection keeps one product per category to avoid confusing alternatives", () => {
