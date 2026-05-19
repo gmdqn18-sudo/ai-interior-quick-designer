@@ -2,6 +2,7 @@ import type { DesignConcept } from "./interior-design";
 import type { ProductReference } from "./product-composition";
 
 export type RenderAfterImageMode = "openai-image-edit" | "product-composite-edit" | "product-composite-preview" | "mock-image-preview";
+export type RenderAfterProvider = "openai" | "openrouter";
 
 export type RenderAfterRequest = {
   imageDataUrl?: unknown;
@@ -10,6 +11,7 @@ export type RenderAfterRequest = {
   keptFurniture?: unknown;
   productReference?: unknown;
   productReferences?: unknown;
+  provider?: unknown;
 };
 
 export type ParsedImageData = {
@@ -24,6 +26,7 @@ export type RenderAfterInput = {
   keptFurniture: string[];
   productReference?: ProductReference;
   productReferences?: ProductReference[];
+  provider?: RenderAfterProvider;
 };
 
 export type RenderAfterResponse = {
@@ -31,7 +34,7 @@ export type RenderAfterResponse = {
   productCompositePreviewImageUrl?: string;
   prompt: string;
   mode: RenderAfterImageMode;
-  provider: "openai" | "server-composite" | "mock";
+  provider: RenderAfterProvider | "server-composite" | "mock";
   error?: string;
   meta: {
     model: string;
@@ -87,6 +90,10 @@ function sanitizeProductReference(product: ProductReference): ProductReference {
     source: product.source.slice(0, 40) as ProductReference["source"],
     url: product.url,
   };
+}
+
+function normalizeRenderAfterProvider(provider: unknown): RenderAfterProvider | undefined {
+  return provider === "openai" || provider === "openrouter" ? provider : undefined;
 }
 
 export function imageDataUrlToBlobParts(imageDataUrl: string): ParsedImageData {
@@ -236,6 +243,7 @@ export function normalizeRenderAfterRequest(body: RenderAfterRequest): Normalize
       : productReference
         ? [productReference]
         : undefined;
+    const provider = normalizeRenderAfterProvider(body.provider);
 
     return {
       ok: true,
@@ -246,6 +254,7 @@ export function normalizeRenderAfterRequest(body: RenderAfterRequest): Normalize
         keptFurniture,
         productReference,
         productReferences,
+        provider,
       },
     };
   } catch (error) {

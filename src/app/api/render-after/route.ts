@@ -6,6 +6,7 @@ import {
   normalizeRenderAfterRequest,
   type ParsedImageData,
   type RenderAfterInput,
+  type RenderAfterProvider,
   type RenderAfterRequest,
   type RenderAfterResponse,
 } from "@/lib/after-image";
@@ -18,11 +19,37 @@ const DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2";
 const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || DEFAULT_OPENAI_IMAGE_MODEL;
 const OPENAI_IMAGE_SIZE = process.env.OPENAI_IMAGE_SIZE || "1536x1024";
 const DEFAULT_OPENAI_IMAGE_TIMEOUT_MS = 240_000;
+const DEFAULT_OPENROUTER_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview";
+const OPENROUTER_IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL || DEFAULT_OPENROUTER_IMAGE_MODEL;
+const OPENROUTER_IMAGE_SIZE = process.env.OPENROUTER_IMAGE_SIZE || "1K";
+const OPENROUTER_IMAGE_ASPECT_RATIO = process.env.OPENROUTER_IMAGE_ASPECT_RATIO || "3:2";
+const DEFAULT_OPENROUTER_IMAGE_TIMEOUT_MS = 240_000;
 
 function getOpenAIImageTimeoutMs() {
   const raw = Number.parseInt(process.env.OPENAI_IMAGE_TIMEOUT_MS ?? "", 10);
   if (!Number.isFinite(raw)) return DEFAULT_OPENAI_IMAGE_TIMEOUT_MS;
   return Math.min(285_000, Math.max(10_000, raw));
+}
+
+function getOpenRouterImageTimeoutMs() {
+  const raw = Number.parseInt(process.env.OPENROUTER_IMAGE_TIMEOUT_MS ?? "", 10);
+  if (!Number.isFinite(raw)) return DEFAULT_OPENROUTER_IMAGE_TIMEOUT_MS;
+  return Math.min(285_000, Math.max(10_000, raw));
+}
+
+function resolveRenderProvider(requestProvider?: RenderAfterProvider): RenderAfterProvider {
+  if (requestProvider) return requestProvider;
+  return process.env.RENDER_AFTER_PROVIDER === "openrouter" ? "openrouter" : "openai";
+}
+
+function renderProviderHasKey(provider: RenderAfterProvider) {
+  return provider === "openrouter" ? Boolean(process.env.OPENROUTER_API_KEY) : Boolean(process.env.OPENAI_API_KEY);
+}
+
+function renderProviderMissingKeyMessage(provider: RenderAfterProvider) {
+  return provider === "openrouter"
+    ? "OpenRouter 이미지 보정 설정이 아직 준비되지 않아, AI 보정 없이 1차 상품 합성 이미지를 보여드립니다."
+    : "AI 보정 설정이 아직 준비되지 않아, AI 보정 없이 1차 상품 합성 이미지를 보여드립니다.";
 }
 
 function toImageDataUrl(image: ParsedImageData) {
@@ -68,6 +95,73 @@ async function callOpenAIImageEdit(input: { image: ParsedImageData; prompt: stri
 
   if (!imageUrl) {
     throw new Error("OpenAI 응답에 이미지가 포함되지 않았습니다.");
+  }
+
+  return { imageUrl, prompt: input.prompt };
+}
+
+export function parseOpenRouterImageUrl(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const choices = (data as { choices?: unknown }).choices;
+  if (!Array.isArray(choices)) return undefined;
+  const message = (choices[0] as { message?: unknown } | undefined)?.message;
+  if (!message || typeof message !== "object") return undefined;
+  const images = (message as { images?: unknown }).images;
+  if (!Array.isArray(images)) return undefined;
+  const image = images[0] as { image_url?: { url?: unknown }; imageUrl?: { url?: unknown } } | undefined;
+  const url = image?.image_url?.url ?? image?.imageUrl?.url;
+  return typeof url === "string" && url.length > 0 ? url : undefined;
+}
+
+async function callOpenRouterImageEdit(input: { image: ParsedImageData; prompt: string }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getOpenRouterImageTimeoutMs());
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json",
+  };
+
+  if (process.env.OPENROUTER_APP_REFERER) {
+    headers["HTTP-Referer"] = process.env.OPENROUTER_APP_REFERER;
+  }
+  if (process.env.OPENROUTER_APP_TITLE) {
+    headers["X-Title"] = process.env.OPENROUTER_APP_TITLE;
+  }
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      model: OPENROUTER_IMAGE_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: input.prompt },
+            { type: "image_url", image_url: { url: toImageDataUrl(input.image) } },
+          ],
+        },
+      ],
+      modalities: ["image", "text"],
+      image_config: {
+        aspect_ratio: OPENROUTER_IMAGE_ASPECT_RATIO,
+        image_size: OPENROUTER_IMAGE_SIZE,
+      },
+      stream: false,
+    }),
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
+
+  const data = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
+
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? `OpenRouter image API failed with status ${response.status}`);
+  }
+
+  const imageUrl = parseOpenRouterImageUrl(data);
+
+  if (!imageUrl) {
+    throw new Error("OpenRouter 응답에 이미지가 포함되지 않았습니다.");
   }
 
   return { imageUrl, prompt: input.prompt };
@@ -167,14 +261,16 @@ export async function POST(request: NextRequest) {
   }
 
   const prepared = await prepareRenderInput(normalized.input);
+  const provider = resolveRenderProvider(normalized.input.provider);
+  const model = provider === "openrouter" ? OPENROUTER_IMAGE_MODEL : OPENAI_IMAGE_MODEL;
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!renderProviderHasKey(provider)) {
     if (prepared.composition) {
       return NextResponse.json(
         buildCompositePreviewResponse(
           normalized.input,
           prepared,
-          "AI 보정 설정이 아직 준비되지 않아, AI 보정 없이 1차 상품 합성 이미지를 보여드립니다.",
+          renderProviderMissingKeyMessage(provider),
         ),
         { status: 200 },
       );
@@ -185,21 +281,25 @@ export async function POST(request: NextRequest) {
       prompt: prepared.prompt,
       mode: "mock-image-preview",
       provider: "mock",
-      error: "AI 보정 설정이 아직 준비되지 않아 실제 이미지 보정은 건너뛰었습니다.",
+      error: provider === "openrouter"
+        ? "OpenRouter 이미지 보정 설정이 아직 준비되지 않아 실제 이미지 보정은 건너뛰었습니다."
+        : "AI 보정 설정이 아직 준비되지 않아 실제 이미지 보정은 건너뛰었습니다.",
       meta: compositionMeta(normalized.input, undefined, "none", prepared.fallbackReason),
     };
     return NextResponse.json(response, { status: 200 });
   }
 
   try {
-    const result = await callOpenAIImageEdit({ image: prepared.image, prompt: prepared.prompt });
+    const result = provider === "openrouter"
+      ? await callOpenRouterImageEdit({ image: prepared.image, prompt: prepared.prompt })
+      : await callOpenAIImageEdit({ image: prepared.image, prompt: prepared.prompt });
     const response: RenderAfterResponse = {
       imageUrl: result.imageUrl,
       productCompositePreviewImageUrl: prepared.composition ? toImageDataUrl(prepared.image) : undefined,
       prompt: result.prompt,
       mode: prepared.mode,
-      provider: "openai",
-      meta: compositionMeta(normalized.input, prepared.composition, OPENAI_IMAGE_MODEL, prepared.fallbackReason),
+      provider,
+      meta: compositionMeta(normalized.input, prepared.composition, model, prepared.fallbackReason),
     };
 
     return NextResponse.json(response);
@@ -221,7 +321,7 @@ export async function POST(request: NextRequest) {
       mode: "mock-image-preview",
       provider: "mock",
       error: error instanceof Error ? error.message : "이미지 생성 중 알 수 없는 오류가 발생했습니다.",
-      meta: compositionMeta(normalized.input, undefined, OPENAI_IMAGE_MODEL, prepared.fallbackReason),
+      meta: compositionMeta(normalized.input, undefined, model, prepared.fallbackReason),
     };
 
     return NextResponse.json(response, { status: 502 });

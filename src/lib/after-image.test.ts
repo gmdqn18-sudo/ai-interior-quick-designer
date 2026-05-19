@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { buildAfterImagePrompt, buildMultiProductCompositePrompt, buildProductCompositePrompt, imageDataUrlToBlobParts, normalizeRenderAfterRequest } from "./after-image";
+import { parseOpenRouterImageUrl } from "../app/api/render-after/route";
 import type { DesignConcept } from "./interior-design";
 
 const concept: DesignConcept = {
@@ -142,7 +143,54 @@ test("normalizeRenderAfterRequest rejects missing image and keeps valid concept"
     assert.equal(valid.input.productReference?.id, "naver-product-1");
     assert.equal(valid.input.productReference?.imageUrl, "https://example.com/rug.jpg");
     assert.deepEqual(valid.input.productReferences?.map((product) => product.id), ["naver-product-1"]);
+    assert.equal(valid.input.provider, undefined);
   }
+});
+
+test("normalizeRenderAfterRequest keeps request-level OpenRouter provider for local experiments", () => {
+  const valid = normalizeRenderAfterRequest({
+    imageDataUrl: "data:image/jpeg;base64,aGVsbG8=",
+    concept,
+    provider: "openrouter",
+  });
+
+  assert.equal(valid.ok, true);
+  if (valid.ok) {
+    assert.equal(valid.input.provider, "openrouter");
+  }
+
+  const invalidProvider = normalizeRenderAfterRequest({
+    imageDataUrl: "data:image/jpeg;base64,aGVsbG8=",
+    concept,
+    provider: "gemini-direct",
+  });
+
+  assert.equal(invalidProvider.ok, true);
+  if (invalidProvider.ok) {
+    assert.equal(invalidProvider.input.provider, undefined);
+  }
+});
+
+test("parseOpenRouterImageUrl reads image data URLs and rejects text-only responses", () => {
+  assert.equal(
+    parseOpenRouterImageUrl({
+      choices: [
+        {
+          message: {
+            images: [
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,abc123" },
+              },
+            ],
+          },
+        },
+      ],
+    }),
+    "data:image/png;base64,abc123",
+  );
+
+  assert.equal(parseOpenRouterImageUrl({ choices: [{ message: { content: "text only" } }] }), undefined);
 });
 
 test("buildProductCompositePrompt locks the selected product identity for C-option harmonization", () => {
