@@ -54,6 +54,9 @@ test("buildAfterImagePrompt preserves room structure and includes selected conce
   assert.match(prompt, /same photo after interior changes/i);
   assert.match(prompt, /Korean bedroom residential context/i);
   assert.doesNotMatch(prompt, /Korean small room \/ bedroom \/ studio apartment context/i);
+  assert.match(prompt, /same-photo product\/lighting retouch/i);
+  assert.match(prompt, /Preserve the original wall and floor materials, window shape, existing furniture silhouettes/i);
+  assert.match(prompt, /Keep the output close to the input photo, not a polished catalog remake/i);
   assert.match(prompt, /화이트 미니멀 수납 시안/);
   assert.match(prompt, /책상, 침대/);
   assert.match(prompt, /우드 데스크 정리함 세트/);
@@ -183,5 +186,10 @@ test("buildMultiProductCompositePrompt locks up to three selected product identi
   assert.match(prompt, /실제 조명/);
   assert.match(prompt, /실제 수납장/);
   assert.match(prompt, /Do not replace any product with a similar item/i);
+  assert.match(prompt, /same-photo harmonization pass/i);
+  assert.match(prompt, /nearly pixel-identical to the input composite/i);
+  assert.match(prompt, /do not add beds, desks, blinds, lamps, cabinets, rugs, props, or decor/i);
+  assert.match(prompt, /Do not redraw the room, do not change the room layout/i);
+  assert.match(prompt, /Preserve existing furniture silhouettes and positions/i);
   assert.doesNotMatch(prompt, /Recommended items to reflect visually/i);
 });

@@ -6,7 +6,6 @@ import {
   countSoftProductPenalties,
   hasCategoryKeywordMismatch,
   hasStrongProductExclude,
-  productQualityText,
   productIntrinsicText,
 } from "./product-quality-rules";
 

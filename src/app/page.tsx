@@ -3,7 +3,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 
 import type { RenderAfterResponse } from "@/lib/after-image";
-import type { DesignGenerationJob, DesignGenerationResponse, RoomAnalysis, RoomAnalysisResponse } from "@/lib/design-api";
+import type { DesignGenerationJob, DesignGenerationResponse, RoomAnalysis } from "@/lib/design-api";
 import { buildDesignShareUrl, buildShoppingListShareText } from "@/lib/design-share";
 import { composeDesignGenerationJob } from "@/lib/design-generation";
 import {
@@ -329,21 +329,20 @@ export default function Home() {
   const renderedProducts = selectedConcept.products.filter((product) => renderedProductIdSet.has(product.id));
   const visibleProductCompositeTargets = generatedAfterImage ? renderedProducts : productCompositeTargets;
   const visibleProductCompositeTarget = visibleProductCompositeTargets[0] ?? null;
-  const visibleProductPlacement = visibleProductCompositeTarget ? getProductOverlayPlacement(visibleProductCompositeTarget) : null;
   const renderPreviewImage = generatedAfterImage || previewUrl;
   const currentRenderStep = renderProgressSteps[renderProgressStep % renderProgressSteps.length];
   const canShowImageProductMapping = Boolean(generatedAfterImage);
-  const mustBuyProducts = selectedConcept.products.slice(0, Math.min(3, selectedConcept.products.length));
-  const niceToHaveProducts = selectedConcept.products.slice(mustBuyProducts.length);
+  const additionalPurchaseProducts = canShowImageProductMapping
+    ? selectedConcept.products.filter((product) => !renderedProductIdSet.has(product.id))
+    : selectedConcept.products;
+  const mustBuyProducts = additionalPurchaseProducts.slice(0, Math.min(3, additionalPurchaseProducts.length));
+  const niceToHaveProducts = additionalPurchaseProducts.slice(mustBuyProducts.length);
   const planCompletionPercent = Math.min(100, Math.round((selectedConcept.usedBudget / Math.max(budget, 1)) * 100));
   const keptFurnitureText = keptFurniture.length > 0 ? keptFurniture.join(" · ") : "큰 가구는 최대한 유지";
   const furnitureOptions = roomAnalysis?.detectedFurniture.length ? roomAnalysis.detectedFurniture : keepOptions;
 
   useEffect(() => {
-    if (!isRenderingAfter) {
-      setRenderProgressStep(0);
-      return;
-    }
+    if (!isRenderingAfter) return;
 
     const interval = window.setInterval(() => {
       setRenderProgressStep((current) => (current + 1) % renderProgressSteps.length);
@@ -404,7 +403,7 @@ export default function Home() {
         throw new Error("Room analysis API failed");
       }
 
-      const data = (await response.json()) as RoomAnalysisResponse;
+      await response.json().catch(() => null);
       setRoomAnalysis(null);
       setAnalysisNotice("사진 업로드 완료. 현재 사진 판독은 자동 추정용이므로 화면에 확정 분석으로 표시하지 않고, 구매 플랜은 입력한 프롬프트와 예산을 우선합니다.");
       setApiNotice(
@@ -563,6 +562,7 @@ export default function Home() {
     } catch {
       setAfterImageNotice("상품 배치/보정 결과를 만들지 못했습니다. 화면은 멈춘 것이 아니며, 구매 후보 리스트는 계속 확인할 수 있습니다. 잠시 뒤 다시 시도해 주세요.");
     } finally {
+      setRenderProgressStep(0);
       setIsRenderingAfter(false);
     }
   };
@@ -1129,51 +1129,59 @@ export default function Home() {
                 <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                   <div>
                     <h3 className="text-sm font-black text-amber-200">
-                      {canShowImageProductMapping ? "이 방을 완성하기 위한 별도 구매 후보" : "결과 이미지 생성 후 별도 구매 후보 확인"}
+                      {canShowImageProductMapping ? "추가로 확인할 구매 후보" : "결과 이미지 생성 후 구매 후보 분리 확인"}
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
                       {canShowImageProductMapping
-                        ? "결과 이미지는 핵심 상품만 먼저 배치한 참고 결과입니다. 아래 목록은 예산과 요청 조건을 기준으로 따로 확인해야 할 별도 구매 후보입니다."
-                        : "예산과 프롬프트 기준의 구매 후보를 준비했습니다. 이미지 생성 후 대표 상품과 전체 구매 후보를 분리해서 확인할 수 있습니다."}
+                        ? "위 ‘이미지에 반영된 상품’은 이 목록에서 제외했습니다. 아래 상품은 이미지에 들어간 것으로 보지 말고, 예산과 요청 조건 기준으로 별도 검토하세요."
+                        : "이미지 생성 전에는 전체 구매 후보를 준비합니다. 생성 후에는 이미지 반영 상품과 추가 구매 후보를 분리해서 보여드립니다."}
                     </p>
                   </div>
-                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">총 {selectedConcept.products.length}개 · {formatWon(selectedConcept.usedBudget)}</span>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                    {canShowImageProductMapping ? `추가 ${additionalPurchaseProducts.length}개 · 전체 ${selectedConcept.products.length}개` : `전체 ${selectedConcept.products.length}개`} · {formatWon(selectedConcept.usedBudget)}
+                  </span>
                 </div>
                 {canShowImageProductMapping ? (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {selectedConcept.products.map((product, index) => (
-                      <button
-                        key={`used-${product.id}`}
-                        type="button"
-                        onMouseEnter={() => setActiveProductId(product.id)}
-                        onFocus={() => setActiveProductId(product.id)}
-                        onClick={() => setActiveProductId(product.id)}
-                        className={`group rounded-2xl bg-white p-3 text-left text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
-                      >
-                        <div className="flex items-start gap-2">
-                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">{index + 1}</span>
-                          <div className="min-w-0">
-                            <div className="truncate text-xs font-black">{product.name}</div>
-                            <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} · {formatProductPrice(product)}</div>
-                            <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">구매 참고 위치: {getProductPlacement(product)}</div>
-                            <div className="mt-1 text-[11px] font-bold text-slate-400">상세 카드에서 구매처와 확인 사항 보기</div>
+                  additionalPurchaseProducts.length > 0 ? (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {additionalPurchaseProducts.map((product, index) => (
+                        <button
+                          key={`additional-${product.id}`}
+                          type="button"
+                          onMouseEnter={() => setActiveProductId(product.id)}
+                          onFocus={() => setActiveProductId(product.id)}
+                          onClick={() => setActiveProductId(product.id)}
+                          className={`group rounded-2xl bg-white p-3 text-left text-slate-950 shadow-sm ring-2 transition hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-amber-300 ${activeProductId === product.id ? "ring-amber-300" : "ring-transparent"}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[11px] font-black text-white">+{index + 1}</span>
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-black">{product.name}</div>
+                              <div className="mt-1 text-[11px] font-bold text-slate-500">{product.source} · {formatProductPrice(product)}</div>
+                              <div className="mt-1 text-[11px] font-semibold text-amber-700 group-hover:underline">추가 구매 검토 영역: {getProductPlacement(product)}</div>
+                              <div className="mt-1 text-[11px] font-bold text-slate-400">이미지 반영 상품이 아니므로 상세페이지에서 별도 판단</div>
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-2xl border border-dashed border-amber-300/50 bg-slate-950/20 p-4 text-center text-xs font-bold leading-5 text-slate-300">
+                      이번 시안의 구매 후보는 모두 위 이미지 반영 상품으로만 구성되어 있습니다. 별도 추가 후보는 없습니다.
+                    </div>
+                  )
                 ) : (
                   <div className="mt-3 rounded-2xl border border-dashed border-amber-300/50 bg-slate-950/20 p-4 text-center text-xs font-bold leading-5 text-slate-300">
-                    먼저 위의 “핵심 상품 넣어 결과 이미지 만들기” 버튼을 눌러 이미지 반영 상품을 확인한 뒤, 예산과 프롬프트 기준의 별도 구매 후보 리스트를 확인하세요.
+                    먼저 위의 “핵심 상품 넣어 결과 이미지 만들기” 버튼을 눌러 이미지 반영 상품을 확인한 뒤, 예산과 프롬프트 기준의 추가 구매 후보 리스트를 확인하세요.
                   </div>
                 )}
               </div>
 
-              {canShowImageProductMapping ? (
+              {canShowImageProductMapping && additionalPurchaseProducts.length > 0 ? (
               <div className="mt-5 space-y-4">
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-black text-amber-200">먼저 확인할 별도 구매 후보</h3>
+                    <h3 className="text-sm font-black text-amber-200">먼저 확인할 추가 구매 후보</h3>
                     <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">구매 전 확인 필요</span>
                   </div>
                   <div className="space-y-3">
@@ -1280,9 +1288,13 @@ export default function Home() {
                   </div>
                 ) : null}
               </div>
+              ) : canShowImageProductMapping ? (
+                <div className="mt-5 rounded-3xl border border-dashed border-slate-500/60 bg-white/10 p-5 text-center text-sm font-bold leading-6 text-slate-300">
+                  이번 시안은 이미지 반영 상품 외에 추가 구매 후보가 없습니다. 구매 전 가격·옵션·배송·재고는 위 상품 카드의 상세 링크에서 확인하세요.
+                </div>
               ) : (
                 <div className="mt-5 rounded-3xl border border-dashed border-slate-500/60 bg-white/10 p-5 text-center text-sm font-bold leading-6 text-slate-300">
-                  예산과 프롬프트 기준의 구매 후보를 준비했습니다. 대표 상품 배치 결과를 만든 뒤 별도 상품 리스트와 링크를 확인할 수 있습니다.
+                  예산과 프롬프트 기준의 구매 후보를 준비했습니다. 대표 상품 배치 결과를 만든 뒤 이미지 반영 상품과 추가 구매 후보를 분리해서 확인할 수 있습니다.
                 </div>
               )}
             </div>

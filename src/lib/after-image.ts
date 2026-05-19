@@ -133,11 +133,15 @@ export function buildAfterImagePrompt(input: {
 
   return [
     "Use the provided room photo as the locked reference frame for an image-to-image interior edit.",
+    "STRICT PRESERVATION GOAL: this is not a room redesign or a new interior rendering; it is a same-photo product/lighting retouch.",
     "CRITICAL: keep the exact same camera position, camera height, lens perspective, field of view, crop, and viewing angle as the input photo.",
     "Do not rotate, zoom in, zoom out, reframe, change to eye-level, change to a catalog/product-shot angle, or create a different room.",
     "Preserve the original room geometry and fixed architecture: walls, floor, ceiling lines, door, window, radiator, curtain rail, built-in structures, and visible room boundaries.",
+    "Preserve the original wall and floor materials, window shape, existing furniture silhouettes, furniture positions, object scale, and circulation paths unless the user explicitly asked to remove or replace them.",
     "Preserve the real placement scale of major furniture unless explicitly replaced: bed area, desk/chair zone, wardrobe/storage zone, and circulation paths must stay recognizable from the original photo.",
-    "Edit the existing room in-place: declutter, recolor, restyle, add realistic renter-friendly decor and purchasable items, but keep the Before/After comparable from the same shot.",
+    "Only make minimal in-place changes needed for color balance, natural shadows, lighting integration, mild decluttering, and realistic renter-friendly decor; do not invent a new layout, new windows, new walls, or new large furniture.",
+    "Keep the output close to the input photo, not a polished catalog remake; preserve existing furniture and architecture even if they are imperfect.",
+    "Edit the existing room in-place and keep the Before/After comparable from the same shot.",
     imageContext,
     `Design concept title: ${input.concept.title}`,
     `Design strategy: ${input.concept.strategy}`,
@@ -184,13 +188,19 @@ export function buildMultiProductCompositePrompt(input: {
     });
 
   return [
-    `Use the provided room photo as a pre-composited image: ${productLines.length} real product image${productLines.length > 1 ? "s have" : " has"} already been placed on top of the original room photo.`,
+    "Use the provided room photo as a pre-composited image: the real product images are already placed on top of the original room photo and must remain in the same positions.",
+    "STRICT PRESERVATION GOAL: this is not a redesign request. It is a same-photo harmonization pass for already-composited products.",
+    `There are ${productLines.length} selected real product image${productLines.length > 1 ? "s" : ""} to preserve:`,
     "CRITICAL MULTI-PRODUCT LOCK: preserve every listed product exactly as a visible product in the input image.",
     "Do not alter any product identity, silhouette, color, pattern, proportions, logo, material cues, or visible details.",
     "Do not replace any product with a similar item and do not hallucinate new products.",
     "Only harmonize lighting, contact shadows, color temperature, edge blending, and subtle spatial ambience around the already-placed products.",
+    "Keep the output nearly pixel-identical to the input composite except for those lighting, shadow, color, and edge-blending corrections.",
+    "Do not make the room prettier by redesigning it; do not add beds, desks, blinds, lamps, cabinets, rugs, props, or decor that are not already visible in the input composite.",
+    "Do not redraw the room, do not change the room layout, and do not remove or move existing furniture, windows, walls, floor, or large objects from the input image.",
     "Keep the exact same camera position, lens perspective, field of view, crop, and room geometry as the input photo.",
     "Preserve fixed architecture: walls, floor, ceiling lines, door, window, built-in structures, and visible room boundaries.",
+    "Preserve existing furniture silhouettes and positions unless a listed pre-composited product is already covering that exact area.",
     imageContext,
     "Selected real products to preserve:",
     productLines.join("\n"),
