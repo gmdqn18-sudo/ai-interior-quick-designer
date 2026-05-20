@@ -18,6 +18,7 @@ import {
   styleChips,
 } from "@/lib/interior-design";
 import { getImageReflectionSelectionReason, selectProductsForImageReflection } from "@/lib/product-visual-selection";
+import { getRenderResultBadge, getResultTrustNotice, type RenderTrustMode } from "@/lib/result-trust-copy";
 
 const formatter = new Intl.NumberFormat("ko-KR");
 
@@ -43,39 +44,7 @@ function formatProductPrice(product: Product) {
   return formatWon(product.price);
 }
 
-type RenderResultMode = NonNullable<RenderAfterResponse["mode"]>;
-
-function getRenderResultBadge(mode: RenderResultMode | null, hasImage: boolean) {
-  if (!hasImage) {
-    return {
-      label: "분위기 참고 이미지 · 실제 상품과 다를 수 있음",
-      detail: "아직 실제 상품을 사진에 배치하기 전입니다.",
-      className: "bg-white/90 text-slate-950",
-    };
-  }
-
-  if (mode === "product-composite-edit") {
-    return {
-      label: "최종 AI 보정본",
-      detail: "핵심 상품 최대 3개를 먼저 배치한 뒤 조명과 색감을 보정한 결과입니다.",
-      className: "bg-emerald-200 text-emerald-950",
-    };
-  }
-
-  if (mode === "product-composite-preview") {
-    return {
-      label: "1차 상품 합성본 · 최종 보정 전",
-      detail: "상품 위치와 형태를 먼저 확인하는 미리보기입니다.",
-      className: "bg-amber-200 text-slate-950",
-    };
-  }
-
-  return {
-    label: "분위기 참고 이미지 · 실제 상품과 다를 수 있음",
-    detail: "상품 후보와 별도로 만든 스타일 참고용 이미지입니다.",
-    className: "bg-white/90 text-slate-950",
-  };
-}
+type RenderResultMode = Extract<NonNullable<RenderAfterResponse["mode"]>, RenderTrustMode>;
 
 function buildShoppingListText(concept: DesignConcept, budget: number) {
   const productLines = concept.products
@@ -274,7 +243,7 @@ export default function Home() {
   const [productCompositePreviewImages, setProductCompositePreviewImages] = useState<Record<string, string>>({});
   const [generatedAfterModes, setGeneratedAfterModes] = useState<Record<string, RenderResultMode>>({});
   const [renderedProductIds, setRenderedProductIds] = useState<Record<string, string[]>>({});
-  const [afterImageNotice, setAfterImageNotice] = useState("결과 이미지는 핵심 상품 배치와 스타일을 확인하는 출발점입니다. 실제 구매는 별도 상품 카드의 가격·옵션·사이즈를 확인한 뒤 판단하세요.");
+  const [afterImageNotice, setAfterImageNotice] = useState(getResultTrustNotice(false));
   const [isRenderingAfter, setIsRenderingAfter] = useState(false);
   const [renderProgressStep, setRenderProgressStep] = useState(0);
   const [copyStatus, setCopyStatus] = useState("쇼핑 리스트 복사");
@@ -543,10 +512,10 @@ export default function Home() {
       setRenderedProductIds((current) => ({ ...current, [selectedConcept.id]: renderedIds }));
       setAfterImageNotice(
         data.mode === "product-composite-edit"
-          ? "핵심 상품을 원본 사진 위에 먼저 올린 뒤 조명·그림자·색감을 보정했습니다. 상품 썸네일과 결과 이미지를 함께 비교해 주세요."
+          ? getResultTrustNotice(true)
           : data.mode === "product-composite-preview"
-            ? "AI 보정이 제한 시간 안에 끝나지 않아, 핵심 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 형태 확인용입니다."
-          : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태와 다를 수 있으니, 별도 구매 후보 카드에서 상품 정보를 확인하세요.",
+            ? "AI 보정이 제한 시간 안에 끝나지 않아, 핵심 상품을 원본 사진 위에 올린 1차 합성 이미지를 먼저 보여드립니다. 상품 위치와 형태 확인용이며, 실제 구매 링크와 연결된 항목은 ‘이미지에 반영된 상품’과 ‘추가 구매 후보’ 카드 기준입니다."
+          : "분위기 참고 이미지 생성 완료. 이미지 속 가구/소품은 실제 상품 형태나 구매 후보가 아닐 수 있으니, 실제 구매 링크는 별도 상품 카드에서 확인하세요.",
       );
     } catch {
       setAfterImageNotice("상품 배치/보정 결과를 만들지 못했습니다. 화면은 멈춘 것이 아니며, 구매 후보 리스트는 계속 확인할 수 있습니다. 잠시 뒤 다시 시도해 주세요.");
@@ -1080,7 +1049,7 @@ export default function Home() {
                       <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                         <div>
                           <p className="text-sm font-black text-amber-100">이미지에 반영된 상품</p>
-                          <p className="mt-1 text-slate-300">{imageReflectionSelectionReason} 이 기준을 통과한 상품만 최대 3개 표시합니다.</p>
+                          <p className="mt-1 text-slate-300">이미지 안의 모든 물체가 구매 후보는 아닙니다. {imageReflectionSelectionReason} 이 기준을 통과한 상품만 최대 3개 표시합니다.</p>
                         </div>
                         <span className="rounded-full bg-amber-200 px-3 py-1 text-[11px] font-black text-slate-950">{visibleProductCompositeTargets.length}개 반영</span>
                       </div>
@@ -1133,7 +1102,7 @@ export default function Home() {
                     </h3>
                     <p className="mt-1 text-xs leading-5 text-slate-300">
                       {canShowImageProductMapping
-                        ? `위 ‘이미지에 반영된 상품’은 이 목록에서 제외했습니다. 같은 카테고리 대체 후보는 별도 영역에 분리됩니다. ${imageReflectionSelectionReason}`
+                        ? `위 ‘이미지에 반영된 상품’은 이 목록에서 제외했습니다. 이미지 안의 모든 물체가 구매 후보는 아니며, 실제 구매 링크는 ‘이미지에 반영된 상품’과 이 ‘추가 구매 후보’ 카드 기준입니다. 같은 카테고리 대체 후보는 별도 영역에 분리됩니다. ${imageReflectionSelectionReason}`
                         : "이미지 생성 전에는 전체 구매 후보를 준비합니다. 생성 후에는 이미지 반영 상품, 같은 카테고리 대체 후보, 일반 추가 구매 후보를 분리해서 보여드립니다."}
                     </p>
                   </div>

@@ -401,6 +401,54 @@ test("buildInteriorDesignPlan can use injected live product candidates instead o
   assert.ok(selectedProducts.every((product) => product.linkType === "naver-shopping-result"));
 });
 
+test("buildInteriorDesignPlan avoids padding premium residential budgets with bath mats bed storage and tiny accessories", () => {
+  const liveProduct = (category: string, name: string, price: number): Product => ({
+    id: `premium-${category}-${name}`.replace(/\s+/g, "-"),
+    externalId: `external-premium-${category}-${name}`,
+    name,
+    category,
+    price,
+    source: "네이버쇼핑",
+    url: `https://smartstore.naver.com/test/products/${encodeURIComponent(name)}`,
+    linkType: "naver-shopping-result",
+    fetchedAt: "2026-05-18T00:00:00.000Z",
+    reason: `${category} live candidate`,
+    provider: "naver-shopping",
+    searchQuery: `${category} 검색`,
+    availabilityNote: "가격/재고 변동 가능",
+    mallName: "테스트몰",
+  });
+  const productCandidates: Product[] = [
+    liveProduct("러그", "원룸 욕실 러그 발매트 미끄럼방지 발판", 12900),
+    liveProduct("수납", "원룸 침대프레임 기숙사침대 이층침대 계단 깔판", 99000),
+    liveProduct("조명", "미니 USB 작은 조명 소품", 7900),
+    liveProduct("러그", "프리미엄 원룸 대형 러그 카페트", 189000),
+    liveProduct("수납", "와이드 원룸 수납 선반 장식장", 249000),
+    liveProduct("커튼", "호텔식 암막 커튼 블라인드 대형", 179000),
+    liveProduct("조명", "프리미엄 플로어스탠드 조명", 149000),
+  ];
+
+  const plan = buildInteriorDesignPlan(
+    {
+      budget: 1_000_000,
+      prompt: "원룸을 호텔식으로 고급스럽게 꾸미고 싶습니다. 러그, 커튼, 큰 수납 중심으로 추천해주세요.",
+      generation: 1,
+      keptFurniture: [],
+      roomAnalysis: null,
+    },
+    { productCandidates },
+  );
+  const selectedText = plan.concepts.flatMap((concept) => concept.products).map((product) => product.name).join(" / ");
+  const highestUsedBudget = Math.max(...plan.concepts.map((concept) => concept.usedBudget));
+
+  assert.doesNotMatch(selectedText, /욕실|발매트|미끄럼방지|발판/);
+  assert.doesNotMatch(selectedText, /침대프레임|기숙사침대|이층침대|깔판/);
+  assert.doesNotMatch(selectedText, /미니 USB 작은 조명 소품/);
+  assert.match(selectedText, /대형 러그/);
+  assert.match(selectedText, /수납 선반|장식장/);
+  assert.ok(highestUsedBudget >= 600_000, `expected premium plan to use substantial products, got ${highestUsedBudget}`);
+});
+
 test("buildInteriorDesignPlan exposes metrics for API responses and recent history", () => {
   const plan = buildInteriorDesignPlan({
     budget: 300000,

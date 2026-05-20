@@ -187,3 +187,68 @@ test("resolveProductCandidatesForDesign uses live candidates before fallback whe
   assert.equal(result.products.length, 12);
   assert.ok(result.products.every((product) => product.source === "네이버쇼핑"));
 });
+
+test("resolveProductCandidatesForDesign filters bath mat rug and bed-frame storage false positives", async () => {
+  const items = [
+    {
+      title: "원룸 욕실 러그 발매트 미끄럼방지 발판",
+      link: "https://smartstore.naver.com/bath/products/mat-1",
+      lprice: "12900",
+      mallName: "욕실몰",
+      productId: "bath-mat-1",
+      category1: "생활/건강",
+      category2: "욕실용품",
+      category3: "발매트",
+    },
+    {
+      title: "원룸 침대프레임 기숙사침대 이층침대 계단 깔판",
+      link: "https://smartstore.naver.com/bed/products/frame-1",
+      lprice: "99000",
+      mallName: "침대몰",
+      productId: "bed-frame-1",
+      category1: "가구/인테리어",
+      category2: "침실가구",
+      category3: "침대프레임",
+    },
+    {
+      title: "원룸 베이지 대형 러그 카페트",
+      link: "https://smartstore.naver.com/rug/products/rug-1",
+      lprice: "89000",
+      mallName: "러그몰",
+      productId: "rug-1",
+      category1: "가구/인테리어",
+      category2: "카페트/러그",
+    },
+    {
+      title: "원룸 와이드 수납 선반 장식장",
+      link: "https://smartstore.naver.com/storage/products/shelf-1",
+      lprice: "159000",
+      mallName: "수납몰",
+      productId: "storage-1",
+      category1: "가구/인테리어",
+      category2: "수납가구",
+      category3: "선반",
+    },
+  ];
+  const fetchImpl: typeof fetch = async () =>
+    new Response(JSON.stringify({ total: items.length, start: 1, display: items.length, items }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  const result = await resolveProductCandidatesForDesign(
+    {
+      ...request,
+      budget: 1_000_000,
+      prompt: "원룸을 호텔식으로 고급스럽게 꾸미고 싶습니다. 러그와 수납을 큰 상품 중심으로 추천해주세요.",
+    },
+    undefined,
+    { clientId: "client", clientSecret: "secret", fetchImpl, display: items.length, minLiveProducts: 2, maxQueries: 2 },
+  );
+
+  const names = result.products.map((product) => product.name).join(" / ");
+  assert.doesNotMatch(names, /욕실|화장실|발매트|발판|발닦이|미끄럼방지/);
+  assert.doesNotMatch(names, /침대프레임|기숙사침대|이층침대|침대 계단|깔판/);
+  assert.match(names, /대형 러그|카페트/);
+  assert.match(names, /수납 선반|장식장/);
+});
